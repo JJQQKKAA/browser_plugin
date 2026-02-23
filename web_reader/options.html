@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Reader - 配置</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="options-page">
+  <div class="container">
+    <h1>Web Reader 配置</h1>
+
+    <div class="config-section">
+      <h2>API 配置</h2>
+
+      <div class="form-group">
+        <label for="apiUrl">API URL</label>
+        <input type="text" id="apiUrl" placeholder="https://api.openai.com/v1/chat/completions">
+        <span class="hint">支持 OpenAI 兼容格式，以 /v1/chat/completions 结尾</span>
+      </div>
+
+      <div class="form-group">
+        <label for="apiKey">API Key</label>
+        <input type="password" id="apiKey" placeholder="sk-...">
+        <span class="hint">你的 API 密钥，仅存储在本地</span>
+      </div>
+
+      <div class="form-group">
+        <label for="modelName">模型名称</label>
+        <input type="text" id="modelName" placeholder="gpt-4o-mini">
+        <span class="hint">例如: gpt-4o-mini, claude-3-haiku, qwen-turbo</span>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <h2>Prompt 配置</h2>
+
+      <div class="form-group">
+        <label for="systemPrompt">System Prompt (系统提示词)</label>
+        <textarea id="systemPrompt" rows="4" placeholder="你是一个网页内容总结助手，擅长提取关键信息...">你是一个专业的网页内容总结助手，擅长提取文章的核心观点和关键信息。请用简洁清晰的语言总结内容。</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="userPrompt">User Prompt (用户提示词)</label>
+        <textarea id="userPrompt" rows="4" placeholder="请总结以下内容...">请总结以下网页内容，提取关键信息和核心观点：
+
+{{content}}
+
+请用中文简洁地总结，控制在 200 字以内。</textarea>
+        <span class="hint">使用 {{content}} 作为网页内容的占位符</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="saveBtn" class="btn btn-primary">保存配置</button>
+      <span id="saveStatus" class="status"></span>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

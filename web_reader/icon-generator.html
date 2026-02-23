@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>图标生成器</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    canvas { border: 1px solid #ddd; margin: 10px; }
+    .icon-preview { display: inline-block; text-align: center; margin: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Web Reader 图标生成器</h2>
+  <p>右键点击下方的图标保存为对应尺寸的文件：</p>
+
+  <div id="icons"></div>
+
+  <script>
+    const sizes = [16, 48, 128];
+    const container = document.getElementById('icons');
+
+    sizes.forEach(size => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'icon-preview';
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      // 背景
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#4a90d9');
+      gradient.addColorStop(1, '#357abd');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+
+      // 圆角
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.beginPath();
+      const radius = size * 0.15;
+      ctx.roundRect(0, 0, size, size, radius);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+
+      // 文字 "R"
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${size * 0.6}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('R', size / 2, size / 2);
+
+      const label = document.createElement('div');
+      label.textContent = `icon${size}.png`;
+
+      wrapper.appendChild(canvas);
+      wrapper.appendChild(label);
+      container.appendChild(wrapper);
+
+      // 添加下载链接
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = `icon${size}.png`;
+      link.textContent = '下载';
+      link.style.display = 'block';
+      wrapper.appendChild(link);
+    });
+  </script>
+</body>
+</html>

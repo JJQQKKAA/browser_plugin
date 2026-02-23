@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Reader</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="popup-page">
+  <div class="popup-container">
+    <div class="popup-header">
+      <h1>Web Reader</h1>
+      <a href="#" id="openOptions" class="icon-link" title="打开配置">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.22 4.22l-4.24-4.24M6.34 6.34L2.1 2.1"></path>
+        </svg>
+      </a>
+    </div>
+
+    <div id="noConfig" class="message-box hidden">
+      <p>请先配置 API 信息</p>
+      <button id="gotoConfig" class="btn btn-primary">前往配置</button>
+    </div>
+
+    <div id="mainContent">
+      <div class="page-info">
+        <span id="pageTitle" class="page-title"></span>
+      </div>
+
+      <button id="summarizeBtn" class="btn btn-primary btn-large">
+        <span id="btnText">总结当前页面</span>
+      </button>
+
+      <div id="result" class="result-box hidden">
+        <div class="result-header">
+          <h3>总结结果</h3>
+          <button id="copyBtn" class="btn btn-small" title="复制">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+        <div id="resultContent" class="result-content"></div>
+      </div>
+
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <span id="loadingText">正在提取内容...</span>
+      </div>
+
+      <div id="error" class="error-box hidden"></div>
+    </div>
+  </div>
+
+  <script src="marked.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
