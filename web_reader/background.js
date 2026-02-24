@@ -10,7 +10,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         tabId: request.tabId,
         url: request.url,
         title: request.title,
-        content: request.content,
+        comboId: request.comboId,
+        chatHistory: request.chatHistory,
         isLoading: request.isLoading,
         error: request.error,
         timestamp: Date.now()

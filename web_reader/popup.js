@@ -10,6 +10,10 @@ const elements = {
   btnText: document.getElementById('btnText'),
   result: document.getElementById('result'),
   resultContent: document.getElementById('resultContent'),
+  chatMessages: document.getElementById('chatMessages'),
+  chatInput: document.getElementById('chatInput'),
+  sendBtn: document.getElementById('sendBtn'),
+  clearChatBtn: document.getElementById('clearChatBtn'),
   copyBtn: document.getElementById('copyBtn'),
   loading: document.getElementById('loading'),
   loadingText: document.getElementById('loadingText'),
@@ -20,8 +24,12 @@ let configData = null;
 let currentTabId = null;
 let currentUrl = null;
 let isSummarizing = false;
+let isChatting = false;
 let abortController = null;
 let selectedComboId = null;
+let chatHistory = []; // 对话历史
+let currentModel = null; // 当前使用的模型
+let isInitialSummary = false; // 是否是第一次总结（初始总结不显示用户输入）
 
 // 检查配置
 async function checkConfig() {
@@ -132,6 +140,7 @@ async function saveState(state) {
       url: currentUrl,
       title: elements.pageTitle.textContent,
       comboId: selectedComboId,
+      chatHistory: chatHistory,
       ...state
     });
   } catch (error) {
@@ -150,16 +159,19 @@ async function restoreState() {
         selectedComboId = response.state.comboId;
       }
 
-      // 恢复状态
-      if (response.state.content) {
+      // 恢复对话历史
+      if (response.state.chatHistory && response.state.chatHistory.length > 0) {
+        chatHistory = response.state.chatHistory;
+        renderChatMessages();
+        elements.result.classList.remove('hidden');
+      } else if (response.state.content) {
+        // 兼容旧格式
         elements.result.classList.remove('hidden');
         renderMarkdown(response.state.content);
       }
+
       if (response.state.isLoading) {
         elements.result.classList.remove('hidden');
-        if (response.state.content) {
-          renderMarkdown(response.state.content + '\n\n_（之前的内容，点击"总结当前页面"继续）_');
-        }
       }
       if (response.state.error) {
         showError(response.state.error);
@@ -176,6 +188,8 @@ async function restoreState() {
 async function clearState() {
   try {
     await chrome.runtime.sendMessage({ type: 'CLEAR_SUMMARY_STATE' });
+    chatHistory = [];
+    currentModel = null;
   } catch (error) {
     console.error('清除状态失败:', error);
   }
@@ -191,7 +205,9 @@ async function extractPageContent() {
       target: { tabId: tab.id },
       func: () => {
         if (window.webReaderExtractContent) {
-          return window.webReaderExtractContent();
+          const result = window.webReaderExtractContent();
+          // 返回 content 字段（包含元信息和正文）
+          return result && result.content ? result.content : result;
         }
         return extractContentFallback();
       }
@@ -253,13 +269,67 @@ function renderMarkdown(text) {
       headerIds: false,
       mangle: false
     });
-    elements.resultContent.innerHTML = marked.parse(text);
-  } else {
-    elements.resultContent.textContent = text;
+    return marked.parse(text);
+  }
+  return escapeHtml(text).replace(/\n/g, '<br>');
+}
+
+// 渲染单条聊天消息
+function renderChatMessage(message, index, isStreaming = false) {
+  const div = document.createElement('div');
+  div.className = `chat-message ${message.role}`;
+  if (isStreaming) {
+    div.id = 'streaming-message';
+  }
+
+  const header = document.createElement('div');
+  header.className = 'chat-message-header';
+  header.textContent = message.role === 'user' ? '你' : 'AI';
+
+  const content = document.createElement('div');
+  content.className = 'chat-message-content';
+  content.innerHTML = renderMarkdown(message.content);
+
+  div.appendChild(header);
+  div.appendChild(content);
+  return div;
+}
+
+// 渲染所有聊天消息
+// isFirstSummary: 第一次总结时不显示 system 和第一个 user 消息
+function renderChatMessages(isFirstSummary = false) {
+  if (!elements.chatMessages) return;
+
+  elements.chatMessages.innerHTML = '';
+
+  chatHistory.forEach((msg, index) => {
+    // 第一次总结时跳过 system 和第一个 user 消息（即索引 0 和 1）
+    if (isFirstSummary && (msg.role === 'system' || index === 1)) {
+      return;
+    }
+    elements.chatMessages.appendChild(renderChatMessage(msg, index));
+  });
+
+  // 滚动到底部
+  elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+}
+
+// 添加消息到聊天历史
+function addMessage(role, content) {
+  chatHistory.push({ role, content, timestamp: Date.now() });
+  renderChatMessages();
+}
+
+// 更新最后一条助手消息
+function updateLastAssistantMessage(content) {
+  const lastMsg = chatHistory[chatHistory.length - 1];
+  if (lastMsg && lastMsg.role === 'assistant') {
+    lastMsg.content = content;
+    renderChatMessages();
   }
 }
 
-// 调用 API 进行总结
+// 调用 API 进行总结（初始化对话）
 async function summarizeContent(content) {
   if (!selectedComboId) {
     throw new Error('请先选择一个模型+Prompt组合');
@@ -277,26 +347,64 @@ async function summarizeContent(content) {
     throw new Error('模型或 Prompt 配置不完整');
   }
 
+  // 保存当前模型配置
+  currentModel = model;
+
   const finalUserPrompt = (prompt.userPrompt || '请总结以下内容：\n\n{{content}}').replace('{{content}}', content);
 
-  const requestBody = {
-    model: model.modelCode,
-    messages: [
-      { role: 'system', content: prompt.systemPrompt || '你是一个网页内容总结助手。' },
-      { role: 'user', content: finalUserPrompt }
-    ],
-    stream: true,
-    temperature: 0.7
-  };
+  // 初始化对话历史
+  chatHistory = [
+    { role: 'system', content: prompt.systemPrompt || '你是一个网页内容总结助手。' },
+    { role: 'user', content: finalUserPrompt }
+  ];
 
+  // 标记为第一次总结（不显示用户输入）
+  isInitialSummary = true;
+
+  // 清空消息区域，第一次总结不显示历史
+  elements.chatMessages.innerHTML = '';
+  elements.result.classList.remove('hidden');
+  elements.resultContent.classList.add('hidden');
+
+  return await callAPIWithHistory();
+}
+
+// 发送聊天消息
+async function sendChatMessage(userMessage) {
+  if (!currentModel) {
+    throw new Error('请先进行总结');
+  }
+
+  // 确保不是初始总结模式
+  isInitialSummary = false;
+
+  // 添加用户消息到历史
+  chatHistory.push({ role: 'user', content: userMessage });
+  renderChatMessages(false);
+
+  // 添加空的助手消息占位
+  chatHistory.push({ role: 'assistant', content: '' });
+
+  return await callAPIWithHistory();
+}
+
+// 调用 API（使用对话历史）
+async function callAPIWithHistory() {
   abortController = new AbortController();
 
   try {
-    const response = await fetch(model.apiUrl, {
+    const requestBody = {
+      model: currentModel.modelCode,
+      messages: chatHistory.map(msg => ({ role: msg.role, content: msg.content })),
+      stream: true,
+      temperature: 0.7
+    };
+
+    const response = await fetch(currentModel.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${model.apiKey}`
+        'Authorization': `Bearer ${currentModel.apiKey}`
       },
       body: JSON.stringify(requestBody),
       signal: abortController.signal
@@ -311,10 +419,7 @@ async function summarizeContent(content) {
     const decoder = new TextDecoder();
     let fullContent = '';
 
-    elements.result.classList.remove('hidden');
-    elements.resultContent.innerHTML = '';
-
-    isSummarizing = true;
+    isChatting = true;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -333,11 +438,21 @@ async function summarizeContent(content) {
             const delta = data.choices?.[0]?.delta?.content;
             if (delta) {
               fullContent += delta;
-              renderMarkdown(fullContent);
+
+              // 确保有一条 assistant 消息在 chatHistory 中
+              let lastMsg = chatHistory[chatHistory.length - 1];
+              if (!lastMsg || lastMsg.role !== 'assistant') {
+                chatHistory.push({ role: 'assistant', content: '' });
+                lastMsg = chatHistory[chatHistory.length - 1];
+              }
+              lastMsg.content = fullContent;
+
+              // 渲染消息，第一次总结不显示 system 和第一个 user
+              renderChatMessages(isInitialSummary);
 
               if (!window.saveStateTimeout) {
                 window.saveStateTimeout = setTimeout(() => {
-                  saveState({ content: fullContent, isLoading: true });
+                  saveState({ isLoading: true });
                   window.saveStateTimeout = null;
                 }, 500);
               }
@@ -349,8 +464,10 @@ async function summarizeContent(content) {
       }
     }
 
-    isSummarizing = false;
-    await saveState({ content: fullContent, isLoading: false });
+    isChatting = false;
+    // 第一次总结完成后，重置标志位，后续聊天正常显示
+    isInitialSummary = false;
+    await saveState({ isLoading: false });
 
     return fullContent;
   } catch (error) {
@@ -359,7 +476,7 @@ async function summarizeContent(content) {
     }
     throw new Error('API 调用失败: ' + error.message);
   } finally {
-    isSummarizing = false;
+    isChatting = false;
     abortController = null;
   }
 }
@@ -401,7 +518,6 @@ async function handleSummarize() {
   }
 
   hideError();
-  elements.result.classList.add('hidden');
   await clearState();
 
   try {
@@ -422,6 +538,40 @@ async function handleSummarize() {
   }
 }
 
+// 处理发送聊天消息
+async function handleSendMessage() {
+  const message = elements.chatInput?.value.trim();
+  if (!message) return;
+
+  if (isChatting) return;
+
+  elements.chatInput.value = '';
+  hideError();
+
+  try {
+    setLoading(true, '正在回复...');
+    await sendChatMessage(message);
+  } catch (error) {
+    console.error('发送消息失败:', error);
+    showError(error.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// 清空对话
+async function handleClearChat() {
+  if (chatHistory.length === 0) return;
+
+  if (!confirm('确定要清空当前对话吗？')) return;
+
+  chatHistory = [];
+  currentModel = null;
+  elements.result.classList.add('hidden');
+  elements.chatMessages.innerHTML = '';
+  await clearState();
+}
+
 // 打开配置页面
 function openOptions() {
   chrome.runtime.openOptionsPage();
@@ -429,7 +579,14 @@ function openOptions() {
 
 // 复制结果
 async function copyResult() {
-  const text = elements.resultContent.textContent;
+  // 复制整个对话或最后一条消息
+  let text = '';
+  chatHistory.forEach(msg => {
+    if (msg.role !== 'system') {
+      text += `${msg.role === 'user' ? '你' : 'AI'}: ${msg.content}\n\n`;
+    }
+  });
+
   if (!text) return;
 
   try {
@@ -454,6 +611,16 @@ async function init() {
   elements.gotoConfig?.addEventListener('click', openOptions);
   elements.summarizeBtn?.addEventListener('click', handleSummarize);
   elements.copyBtn?.addEventListener('click', copyResult);
+  elements.clearChatBtn?.addEventListener('click', handleClearChat);
+  elements.sendBtn?.addEventListener('click', handleSendMessage);
+
+  // 聊天输入框回车发送
+  elements.chatInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  });
 
   const hasConfig = await checkConfig();
   if (!hasConfig) return;

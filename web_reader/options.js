@@ -108,6 +108,7 @@ function renderModels() {
           </span>
           <div class="item-actions">
             <button class="btn btn-small btn-secondary edit-model" data-id="${model.id}">编辑</button>
+            <button class="btn btn-small btn-copy copy-model" data-id="${model.id}">复制</button>
             <button class="btn btn-small btn-danger delete-model" data-id="${model.id}">删除</button>
           </div>
         </div>
@@ -137,6 +138,7 @@ function renderPrompts() {
           </span>
           <div class="item-actions">
             <button class="btn btn-small btn-secondary edit-prompt" data-id="${prompt.id}">编辑</button>
+            <button class="btn btn-small btn-copy copy-prompt" data-id="${prompt.id}">复制</button>
             <button class="btn btn-small btn-danger delete-prompt" data-id="${prompt.id}">删除</button>
           </div>
         </div>
@@ -266,6 +268,51 @@ async function deleteModel(id) {
   }
 }
 
+// 生成不重复的名称
+function generateUniqueName(baseName, existingNames) {
+  if (!existingNames.includes(baseName)) {
+    return baseName;
+  }
+
+  // 如果名称已存在，尝试添加 (1), (2) 等后缀
+  const regex = /^(.*)\s*\((\d+)\)$/;
+  const match = baseName.match(regex);
+  const base = match ? match[1] : baseName;
+  let counter = match ? parseInt(match[2]) : 1;
+
+  let newName = `${base} (${counter})`;
+  while (existingNames.includes(newName)) {
+    counter++;
+    newName = `${base} (${counter})`;
+  }
+  return newName;
+}
+
+// 复制模型
+async function copyModel(id) {
+  const model = configData.models.find(m => m.id === id);
+  if (!model) return;
+
+  // 生成新的唯一名称
+  const existingNames = configData.models.map(m => m.name);
+  const newName = generateUniqueName(model.name, existingNames);
+
+  // 创建复制的模型
+  const copiedModel = {
+    id: generateId('model'),
+    name: newName,
+    apiUrl: model.apiUrl,
+    apiKey: model.apiKey,
+    modelCode: model.modelCode
+  };
+
+  configData.models.push(copiedModel);
+
+  if (await saveConfig()) {
+    renderAll();
+  }
+}
+
 // ===== Prompt 操作 =====
 
 document.getElementById('addPromptBtn').addEventListener('click', () => {
@@ -322,6 +369,30 @@ async function deletePrompt(id) {
 
   configData.prompts = configData.prompts.filter(p => p.id !== id);
   configData.combinations = configData.combinations.filter(c => c.promptId !== id);
+
+  if (await saveConfig()) {
+    renderAll();
+  }
+}
+
+// 复制 Prompt
+async function copyPrompt(id) {
+  const prompt = configData.prompts.find(p => p.id === id);
+  if (!prompt) return;
+
+  // 生成新的唯一名称
+  const existingNames = configData.prompts.map(p => p.shortName);
+  const newName = generateUniqueName(prompt.shortName, existingNames);
+
+  // 创建复制的 Prompt
+  const copiedPrompt = {
+    id: generateId('prompt'),
+    shortName: newName,
+    systemPrompt: prompt.systemPrompt,
+    userPrompt: prompt.userPrompt
+  };
+
+  configData.prompts.push(copiedPrompt);
 
   if (await saveConfig()) {
     renderAll();
@@ -438,6 +509,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target.classList.contains('edit-model')) {
       e.preventDefault();
       editModel(target.dataset.id);
+    } else if (target.classList.contains('copy-model')) {
+      e.preventDefault();
+      copyModel(target.dataset.id);
     } else if (target.classList.contains('delete-model')) {
       e.preventDefault();
       deleteModel(target.dataset.id);
@@ -450,6 +524,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target.classList.contains('edit-prompt')) {
       e.preventDefault();
       editPrompt(target.dataset.id);
+    } else if (target.classList.contains('copy-prompt')) {
+      e.preventDefault();
+      copyPrompt(target.dataset.id);
     } else if (target.classList.contains('delete-prompt')) {
       e.preventDefault();
       deletePrompt(target.dataset.id);
@@ -489,4 +566,96 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     document.getElementById(tab.dataset.tab).classList.add('active');
   });
+});
+
+// ===== 配置导出/导入 =====
+
+// 导出配置
+document.getElementById('exportConfigBtn')?.addEventListener('click', async () => {
+  try {
+    const configToExport = {
+      version: '1.0',
+      exportDate: new Date().toISOString(),
+      models: configData.models,
+      prompts: configData.prompts,
+      combinations: configData.combinations
+    };
+
+    const blob = new Blob([JSON.stringify(configToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `web-reader-config-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('导出配置失败:', error);
+    alert('导出配置失败: ' + error.message);
+  }
+});
+
+// 导入配置 - 点击按钮触发文件选择
+document.getElementById('importConfigBtn')?.addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+
+// 处理文件选择
+document.getElementById('importFileInput')?.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const importedData = JSON.parse(text);
+
+    // 验证数据结构
+    if (!importedData.models || !Array.isArray(importedData.models)) {
+      throw new Error('配置文件格式错误：缺少 models 数组');
+    }
+    if (!importedData.prompts || !Array.isArray(importedData.prompts)) {
+      throw new Error('配置文件格式错误：缺少 prompts 数组');
+    }
+    if (!importedData.combinations || !Array.isArray(importedData.combinations)) {
+      throw new Error('配置文件格式错误：缺少 combinations 数组');
+    }
+
+    // 验证每个模型的必需字段
+    for (const model of importedData.models) {
+      if (!model.id || !model.name || !model.apiUrl || !model.apiKey || !model.modelCode) {
+        throw new Error(`模型 "${model.name || '未命名'}" 缺少必需字段`);
+      }
+    }
+
+    // 验证每个 prompt 的必需字段
+    for (const prompt of importedData.prompts) {
+      if (!prompt.id || !prompt.shortName || !prompt.userPrompt) {
+        throw new Error(`Prompt "${prompt.shortName || '未命名'}" 缺少必需字段`);
+      }
+    }
+
+    // 确认是否覆盖
+    if (configData.models.length > 0 || configData.prompts.length > 0) {
+      if (!confirm(`导入将覆盖现有配置：\n- ${importedData.models.length} 个模型\n- ${importedData.prompts.length} 个 Prompt\n- ${importedData.combinations.length} 个组合\n\n是否继续？`)) {
+        e.target.value = '';
+        return;
+      }
+    }
+
+    // 导入配置
+    configData.models = importedData.models;
+    configData.prompts = importedData.prompts;
+    configData.combinations = importedData.combinations;
+
+    if (await saveConfig()) {
+      renderAll();
+      alert('配置导入成功！');
+    }
+  } catch (error) {
+    console.error('导入配置失败:', error);
+    alert('导入配置失败: ' + error.message);
+  } finally {
+    e.target.value = '';
+  }
 });

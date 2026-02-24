@@ -82,6 +82,13 @@
     .btn-secondary:hover {
       background: #5a6268;
     }
+    .btn-copy {
+      background: #28a745;
+      color: white;
+    }
+    .btn-copy:hover {
+      background: #218838;
+    }
     .default-badge {
       background: #4a90d9;
       color: white;
@@ -168,6 +175,18 @@
       border-color: #4a90d9;
       box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.1);
     }
+    .data-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .data-actions .btn {
+      padding: 8px 16px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body class="options-page">
@@ -178,6 +197,13 @@
       <button class="tab active" data-tab="models">模型配置</button>
       <button class="tab" data-tab="prompts">Prompt 配置</button>
       <button class="tab" data-tab="combinations">组合配置</button>
+    </div>
+
+    <!-- 数据操作栏 -->
+    <div class="data-actions">
+      <button id="exportConfigBtn" class="btn btn-secondary">导出配置</button>
+      <button id="importConfigBtn" class="btn btn-secondary">导入配置</button>
+      <input type="file" id="importFileInput" accept=".json" style="display: none;">
     </div>
 
     <!-- 模型配置 -->
