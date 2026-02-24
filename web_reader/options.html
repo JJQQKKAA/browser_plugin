@@ -5,55 +5,298 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web Reader - 配置</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid #e0e0e0;
+      padding-bottom: 12px;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: none;
+      background: #f0f0f0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .tab:hover {
+      background: #e0e0e0;
+    }
+    .tab.active {
+      background: #4a90d9;
+      color: white;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .item-list {
+      margin-bottom: 20px;
+    }
+    .item-card {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+    .item-card.default {
+      border-color: #4a90d9;
+      background: #f0f7ff;
+    }
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .item-title {
+      font-weight: 600;
+      color: #333;
+    }
+    .item-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-small {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    .btn-danger {
+      background: #dc3545;
+      color: white;
+    }
+    .btn-danger:hover {
+      background: #c82333;
+    }
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background: #5a6268;
+    }
+    .default-badge {
+      background: #4a90d9;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      margin-left: 8px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .combo-select-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #888;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active {
+      display: flex;
+    }
+    .modal-content {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+    }
+    .close-btn:hover {
+      color: #333;
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d0d0d0;
+      border-radius: 6px;
+      font-size: 14px;
+      background: white;
+    }
+    select:focus {
+      outline: none;
+      border-color: #4a90d9;
+      box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.1);
+    }
+  </style>
 </head>
 <body class="options-page">
   <div class="container">
     <h1>Web Reader 配置</h1>
 
-    <div class="config-section">
-      <h2>API 配置</h2>
-
-      <div class="form-group">
-        <label for="apiUrl">API URL</label>
-        <input type="text" id="apiUrl" placeholder="https://api.openai.com/v1/chat/completions">
-        <span class="hint">支持 OpenAI 兼容格式，以 /v1/chat/completions 结尾</span>
-      </div>
-
-      <div class="form-group">
-        <label for="apiKey">API Key</label>
-        <input type="password" id="apiKey" placeholder="sk-...">
-        <span class="hint">你的 API 密钥，仅存储在本地</span>
-      </div>
-
-      <div class="form-group">
-        <label for="modelName">模型名称</label>
-        <input type="text" id="modelName" placeholder="gpt-4o-mini">
-        <span class="hint">例如: gpt-4o-mini, claude-3-haiku, qwen-turbo</span>
-      </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="models">模型配置</button>
+      <button class="tab" data-tab="prompts">Prompt 配置</button>
+      <button class="tab" data-tab="combinations">组合配置</button>
     </div>
 
-    <div class="config-section">
-      <h2>Prompt 配置</h2>
+    <!-- 模型配置 -->
+    <div id="models" class="tab-content active">
+      <h2>模型列表</h2>
+      <div id="modelList" class="item-list"></div>
+      <button id="addModelBtn" class="btn btn-primary">+ 添加模型</button>
+    </div>
 
-      <div class="form-group">
-        <label for="systemPrompt">System Prompt (系统提示词)</label>
-        <textarea id="systemPrompt" rows="4" placeholder="你是一个网页内容总结助手，擅长提取关键信息...">你是一个专业的网页内容总结助手，擅长提取文章的核心观点和关键信息。请用简洁清晰的语言总结内容。</textarea>
+    <!-- Prompt 配置 -->
+    <div id="prompts" class="tab-content">
+      <h2>Prompt 列表</h2>
+      <div id="promptList" class="item-list"></div>
+      <button id="addPromptBtn" class="btn btn-primary">+ 添加 Prompt</button>
+    </div>
+
+    <!-- 组合配置 -->
+    <div id="combinations" class="tab-content">
+      <h2>模型 + Prompt 组合</h2>
+      <div id="comboList" class="item-list"></div>
+      <button id="addComboBtn" class="btn btn-primary">+ 添加组合</button>
+    </div>
+  </div>
+
+  <!-- 模型编辑模态框 -->
+  <div id="modelModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modelModalTitle">添加模型</h3>
+        <button class="close-btn" data-close-modal="modelModal">&times;</button>
       </div>
-
+      <input type="hidden" id="modelId">
       <div class="form-group">
-        <label for="userPrompt">User Prompt (用户提示词)</label>
-        <textarea id="userPrompt" rows="4" placeholder="请总结以下内容...">请总结以下网页内容，提取关键信息和核心观点：
+        <label for="modelName">显示名称 *</label>
+        <input type="text" id="modelName" placeholder="例如：GPT-4、Claude 3">
+      </div>
+      <div class="form-group">
+        <label for="apiUrl">API URL *</label>
+        <input type="text" id="apiUrl" placeholder="https://api.openai.com/v1/chat/completions">
+      </div>
+      <div class="form-group">
+        <label for="apiKey">API Key *</label>
+        <input type="password" id="apiKey" placeholder="sk-...">
+      </div>
+      <div class="form-group">
+        <label for="modelCode">模型代码 *</label>
+        <input type="text" id="modelCode" placeholder="例如：gpt-4o-mini">
+        <span class="hint">调用 API 时使用的 model 参数</span>
+      </div>
+      <div class="btn-group">
+        <button id="saveModelBtn" class="btn btn-primary">保存</button>
+        <button class="btn btn-secondary close-modal-btn" data-close-modal="modelModal">取消</button>
+      </div>
+    </div>
+  </div>
 
-{{content}}
+  <!-- Prompt 编辑模态框 -->
+  <div id="promptModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="promptModalTitle">添加 Prompt</h3>
+        <button class="close-btn" data-close-modal="promptModal">&times;</button>
+      </div>
+      <input type="hidden" id="promptId">
+      <div class="form-group">
+        <label for="promptShortName">简称 *</label>
+        <input type="text" id="promptShortName" placeholder="例如：总结、翻译、提取">
+        <span class="hint">前端选择时显示的简短名称</span>
+      </div>
+      <div class="form-group">
+        <label for="promptSystemPrompt">System Prompt</label>
+        <textarea id="promptSystemPrompt" rows="3" placeholder="你是网页内容总结助手..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="promptUserPrompt">User Prompt *</label>
+        <textarea id="promptUserPrompt" rows="4" placeholder="请总结以下内容：
 
-请用中文简洁地总结，控制在 200 字以内。</textarea>
+{{content}}"></textarea>
         <span class="hint">使用 {{content}} 作为网页内容的占位符</span>
       </div>
+      <div class="btn-group">
+        <button id="savePromptBtn" class="btn btn-primary">保存</button>
+        <button class="btn btn-secondary close-modal-btn" data-close-modal="promptModal">取消</button>
+      </div>
     </div>
+  </div>
 
-    <div class="actions">
-      <button id="saveBtn" class="btn btn-primary">保存配置</button>
-      <span id="saveStatus" class="status"></span>
+  <!-- 组合编辑模态框 -->
+  <div id="comboModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="comboModalTitle">添加组合</h3>
+        <button class="close-btn" data-close-modal="comboModal">&times;</button>
+      </div>
+      <input type="hidden" id="comboId">
+      <div class="form-group">
+        <label for="comboName">组合名称 *</label>
+        <input type="text" id="comboName" placeholder="例如：GPT-4 总结">
+      </div>
+      <div class="form-group">
+        <label>选择模型和 Prompt *</label>
+        <div class="combo-select-row">
+          <select id="comboModelSelect">
+            <option value="">选择模型...</option>
+          </select>
+          <select id="comboPromptSelect">
+            <option value="">选择 Prompt...</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="comboIsDefault"> 设为默认组合
+        </label>
+      </div>
+      <div class="btn-group">
+        <button id="saveComboBtn" class="btn btn-primary">保存</button>
+        <button class="btn btn-secondary close-modal-btn" data-close-modal="comboModal">取消</button>
+      </div>
     </div>
   </div>
 

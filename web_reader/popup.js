@@ -5,6 +5,7 @@ const elements = {
   noConfig: document.getElementById('noConfig'),
   mainContent: document.getElementById('mainContent'),
   pageTitle: document.getElementById('pageTitle'),
+  comboSelect: document.getElementById('comboSelect'),
   summarizeBtn: document.getElementById('summarizeBtn'),
   btnText: document.getElementById('btnText'),
   result: document.getElementById('result'),
@@ -15,19 +16,35 @@ const elements = {
   error: document.getElementById('error')
 };
 
-let currentConfig = null;
+let configData = null;
 let currentTabId = null;
 let currentUrl = null;
 let isSummarizing = false;
 let abortController = null;
+let selectedComboId = null;
 
 // 检查配置
 async function checkConfig() {
   try {
     const result = await chrome.storage.local.get('webReaderConfig');
-    currentConfig = result.webReaderConfig;
 
-    if (!currentConfig || !currentConfig.apiUrl || !currentConfig.apiKey || !currentConfig.modelName) {
+    if (!result.webReaderConfig) {
+      elements.noConfig.classList.remove('hidden');
+      elements.mainContent.classList.add('hidden');
+      return false;
+    }
+
+    // 检查是否是新格式
+    if (result.webReaderConfig.combinations && Array.isArray(result.webReaderConfig.combinations)) {
+      configData = result.webReaderConfig;
+
+      if (configData.combinations.length === 0) {
+        elements.noConfig.classList.remove('hidden');
+        elements.mainContent.classList.add('hidden');
+        return false;
+      }
+    } else {
+      // 旧格式 - 显示配置提示
       elements.noConfig.classList.remove('hidden');
       elements.mainContent.classList.add('hidden');
       return false;
@@ -41,6 +58,54 @@ async function checkConfig() {
     return false;
   }
 }
+
+// 渲染组合选择器
+async function renderComboSelector() {
+  const select = elements.comboSelect;
+  select.innerHTML = '<option value="">选择模型+Prompt组合...</option>';
+
+  if (!configData || !configData.combinations) return;
+
+  // 获取上次使用的组合
+  const lastUsed = await chrome.storage.local.get('lastUsedComboId');
+  const lastUsedId = lastUsed.lastUsedComboId;
+
+  configData.combinations.forEach(combo => {
+    const model = configData.models.find(m => m.id === combo.modelId);
+    const prompt = configData.prompts.find(p => p.id === combo.promptId);
+
+    if (model && prompt) {
+      const option = document.createElement('option');
+      option.value = combo.id;
+      option.textContent = `${combo.name} (${model.name} + ${prompt.shortName})`;
+
+      // 默认选中默认组合或上次使用的组合
+      if (combo.isDefault && !lastUsedId) {
+        option.selected = true;
+        selectedComboId = combo.id;
+      } else if (combo.id === lastUsedId) {
+        option.selected = true;
+        selectedComboId = combo.id;
+      }
+
+      select.appendChild(option);
+    }
+  });
+
+  // 如果没有选中的，选第一个
+  if (!selectedComboId && configData.combinations.length > 0) {
+    select.value = configData.combinations[0].id;
+    selectedComboId = configData.combinations[0].id;
+  }
+}
+
+// 处理组合选择变化
+elements.comboSelect?.addEventListener('change', (e) => {
+  selectedComboId = e.target.value;
+  if (selectedComboId) {
+    chrome.storage.local.set({ lastUsedComboId: selectedComboId });
+  }
+});
 
 // 获取当前页面信息
 async function getCurrentTabInfo() {
@@ -66,6 +131,7 @@ async function saveState(state) {
       tabId: currentTabId,
       url: currentUrl,
       title: elements.pageTitle.textContent,
+      comboId: selectedComboId,
       ...state
     });
   } catch (error) {
@@ -78,13 +144,18 @@ async function restoreState() {
   try {
     const response = await chrome.runtime.sendMessage({ type: 'GET_SUMMARY_STATE' });
     if (response.state && response.state.tabId === currentTabId && response.state.url === currentUrl) {
+      // 恢复组合选择
+      if (response.state.comboId) {
+        elements.comboSelect.value = response.state.comboId;
+        selectedComboId = response.state.comboId;
+      }
+
       // 恢复状态
       if (response.state.content) {
         elements.result.classList.remove('hidden');
         renderMarkdown(response.state.content);
       }
       if (response.state.isLoading) {
-        // 如果之前正在加载，显示恢复提示
         elements.result.classList.remove('hidden');
         if (response.state.content) {
           renderMarkdown(response.state.content + '\n\n_（之前的内容，点击"总结当前页面"继续）_');
@@ -116,16 +187,12 @@ async function extractPageContent() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) throw new Error('无法获取当前页面');
 
-    // 执行内容提取脚本
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
-        // 这个函数在页面上下文中执行
-        // 由于我们已经在 manifest 中注入了 content.js，可以直接调用
         if (window.webReaderExtractContent) {
           return window.webReaderExtractContent();
         }
-        // 备用方案：简单提取
         return extractContentFallback();
       }
     });
@@ -141,20 +208,12 @@ async function extractPageContent() {
   }
 }
 
-// 备用内容提取（在页面上下文中执行）
+// 备用内容提取
 function extractContentFallback() {
-  // 尝试找到主要内容区域
   const selectors = [
-    'article',
-    'main',
-    '[role="main"]',
-    '.post-content',
-    '.entry-content',
-    '.article-content',
-    '.content',
-    '#content',
-    '.post',
-    '.article'
+    'article', 'main', '[role="main"]',
+    '.post-content', '.entry-content', '.article-content',
+    '.content', '#content', '.post', '.article'
   ];
 
   let bestElement = null;
@@ -171,18 +230,13 @@ function extractContentFallback() {
     }
   }
 
-  // 如果没找到，使用 body
   if (!bestElement) {
     bestElement = document.body;
   }
 
-  // 提取文本并清理
   let content = bestElement.innerText || '';
-
-  // 清理多余空白
   content = content.replace(/\s+/g, ' ').trim();
 
-  // 限制长度（约 15000 字符，避免超出 token 限制，但比之前的 8000 更大）
   if (content.length > 15000) {
     content = content.substring(0, 15000) + '...';
   }
@@ -193,7 +247,6 @@ function extractContentFallback() {
 // 渲染 Markdown
 function renderMarkdown(text) {
   if (typeof marked !== 'undefined') {
-    // 配置 marked
     marked.setOptions({
       breaks: true,
       gfm: true,
@@ -202,37 +255,48 @@ function renderMarkdown(text) {
     });
     elements.resultContent.innerHTML = marked.parse(text);
   } else {
-    // 如果 marked 未加载，回退到纯文本
     elements.resultContent.textContent = text;
   }
 }
 
 // 调用 API 进行总结
 async function summarizeContent(content) {
-  const { apiUrl, apiKey, modelName, systemPrompt, userPrompt } = currentConfig;
+  if (!selectedComboId) {
+    throw new Error('请先选择一个模型+Prompt组合');
+  }
 
-  // 替换 prompt 中的占位符
-  const finalUserPrompt = (userPrompt || '请总结以下内容：\n\n{{content}}').replace('{{content}}', content);
+  const combo = configData.combinations.find(c => c.id === selectedComboId);
+  if (!combo) {
+    throw new Error('选中的组合不存在');
+  }
+
+  const model = configData.models.find(m => m.id === combo.modelId);
+  const prompt = configData.prompts.find(p => p.id === combo.promptId);
+
+  if (!model || !prompt) {
+    throw new Error('模型或 Prompt 配置不完整');
+  }
+
+  const finalUserPrompt = (prompt.userPrompt || '请总结以下内容：\n\n{{content}}').replace('{{content}}', content);
 
   const requestBody = {
-    model: modelName,
+    model: model.modelCode,
     messages: [
-      { role: 'system', content: systemPrompt || '你是一个网页内容总结助手。' },
+      { role: 'system', content: prompt.systemPrompt || '你是一个网页内容总结助手。' },
       { role: 'user', content: finalUserPrompt }
     ],
     stream: true,
-    // 移除 max_tokens 限制，让模型自行决定输出长度
     temperature: 0.7
   };
 
   abortController = new AbortController();
 
   try {
-    const response = await fetch(apiUrl, {
+    const response = await fetch(model.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${model.apiKey}`
       },
       body: JSON.stringify(requestBody),
       signal: abortController.signal
@@ -271,7 +335,6 @@ async function summarizeContent(content) {
               fullContent += delta;
               renderMarkdown(fullContent);
 
-              // 每 500ms 保存一次状态
               if (!window.saveStateTimeout) {
                 window.saveStateTimeout = setTimeout(() => {
                   saveState({ content: fullContent, isLoading: true });
@@ -287,7 +350,6 @@ async function summarizeContent(content) {
     }
 
     isSummarizing = false;
-    // 保存最终结果
     await saveState({ content: fullContent, isLoading: false });
 
     return fullContent;
@@ -333,10 +395,13 @@ function hideError() {
 
 // 处理总结按钮点击
 async function handleSummarize() {
+  if (!selectedComboId) {
+    showError('请先选择一个模型+Prompt组合');
+    return;
+  }
+
   hideError();
   elements.result.classList.add('hidden');
-
-  // 清除之前的状态
   await clearState();
 
   try {
@@ -381,7 +446,6 @@ async function copyResult() {
 
 // 初始化
 async function init() {
-  // 先绑定事件（无论是否有配置都需要）
   elements.openOptions?.addEventListener('click', (e) => {
     e.preventDefault();
     openOptions();
@@ -394,9 +458,8 @@ async function init() {
   const hasConfig = await checkConfig();
   if (!hasConfig) return;
 
+  await renderComboSelector();
   await getCurrentTabInfo();
-
-  // 尝试恢复之前的状态
   await restoreState();
 }
 
