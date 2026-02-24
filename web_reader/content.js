@@ -255,12 +255,14 @@
     if (!text) return '';
 
     return text
-      // 替换多个空白为单个空格
-      .replace(/\s+/g, ' ')
       // 移除零宽字符
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      // 清理多余换行
-      .replace(/\n\s*\n/g, '\n')
+      // 清理行内多余空白（但保留换行和缩进）
+      .replace(/[ \t]+/g, ' ')
+      // 清理多余空行（最多保留一个空行）
+      .replace(/\n[ \t]*\n[ \t]*\n+/g, '\n\n')
+      // 清理行尾空白
+      .replace(/[ \t]+$/gm, '')
       .trim();
   }
 

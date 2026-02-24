@@ -264,7 +264,7 @@ function extractContentFallback() {
 function renderMarkdown(text) {
   if (typeof marked !== 'undefined') {
     marked.setOptions({
-      breaks: true,
+      breaks: false,  // 关闭自动换行，避免破坏列表解析
       gfm: true,
       headerIds: false,
       mangle: false
