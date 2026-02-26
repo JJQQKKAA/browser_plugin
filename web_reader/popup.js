@@ -246,15 +246,20 @@ async function extractPageContent() {
       func: () => {
         if (window.webReaderExtractContent) {
           const result = window.webReaderExtractContent();
-          // 返回 content 字段（包含元信息和正文）
-          return result && result.content ? result.content : result;
+          // 返回完整结果对象
+          return result;
         }
-        return extractContentFallback();
+        return { content: extractContentFallback(), metadata: {}, rawContent: extractContentFallback(), isSelection: false };
       }
     });
 
     if (results && results[0] && results[0].result) {
-      return results[0].result;
+      const result = results[0].result;
+      // 返回 content 字符串，但保留 isSelection 信息
+      return {
+        content: result.content || result,
+        isSelection: result.isSelection || false
+      };
     }
 
     throw new Error('内容提取返回空结果');
@@ -567,13 +572,22 @@ async function handleSummarize() {
 
   try {
     setLoading(true, '正在提取内容...');
-    const content = await extractPageContent();
+    const extractResult = await extractPageContent();
+
+    const content = extractResult.content || extractResult;
+    const isSelection = extractResult.isSelection || false;
 
     if (!content || content.length < 50) {
       throw new Error('页面内容太少，无法总结');
     }
 
-    setLoading(true, '正在调用 AI 总结...');
+    // 如果是选中的内容，显示提示
+    if (isSelection) {
+      setLoading(true, '正在总结选中的内容...');
+    } else {
+      setLoading(true, '正在调用 AI 总结...');
+    }
+
     await summarizeContent(content);
   } catch (error) {
     console.error('总结失败:', error);

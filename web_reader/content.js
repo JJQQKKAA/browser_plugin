@@ -65,10 +65,30 @@
     'douban.com': '.review-content, #link-report'
   };
 
+  // 获取选中的文本
+  function getSelectedText() {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      return selection.toString().trim();
+    }
+    return null;
+  }
+
   // 主内容提取函数
   function extractContent() {
     // 提取元信息
     const metadata = extractMetadata();
+
+    // 首先检查是否有选中的文本
+    const selectedText = getSelectedText();
+    if (selectedText && selectedText.length > 10) {
+      return {
+        content: selectedText,
+        metadata: metadata,
+        rawContent: selectedText,
+        isSelection: true
+      };
+    }
 
     // 提取正文内容
     let content = '';
