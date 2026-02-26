@@ -215,6 +215,10 @@ textarea {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.combo-selector + .combo-selector {
+  margin-top: 8px;
+}
+
 .combo-selector select:focus {
   outline: none;
   border-color: #4a90d9;

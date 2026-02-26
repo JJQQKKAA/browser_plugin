@@ -659,3 +659,112 @@ document.getElementById('importFileInput')?.addEventListener('change', async (e)
     e.target.value = '';
   }
 });
+
+// ===== JSON 粘贴导入 =====
+
+// 验证配置格式
+function validateConfig(data) {
+  const errors = [];
+
+  // 检查基本结构
+  if (!data || typeof data !== 'object') {
+    throw new Error('配置必须是一个 JSON 对象');
+  }
+
+  // 检查 models
+  if (!data.models || !Array.isArray(data.models)) {
+    errors.push('缺少 models 数组');
+  } else {
+    data.models.forEach((model, index) => {
+      if (!model.id) errors.push(`models[${index}]: 缺少 id`);
+      if (!model.name) errors.push(`models[${index}]: 缺少 name`);
+      if (!model.apiUrl) errors.push(`models[${index}]: 缺少 apiUrl`);
+      if (!model.apiKey) errors.push(`models[${index}]: 缺少 apiKey`);
+      if (!model.modelCode) errors.push(`models[${index}]: 缺少 modelCode`);
+    });
+  }
+
+  // 检查 prompts
+  if (!data.prompts || !Array.isArray(data.prompts)) {
+    errors.push('缺少 prompts 数组');
+  } else {
+    data.prompts.forEach((prompt, index) => {
+      if (!prompt.id) errors.push(`prompts[${index}]: 缺少 id`);
+      if (!prompt.shortName) errors.push(`prompts[${index}]: 缺少 shortName`);
+      if (!prompt.userPrompt) errors.push(`prompts[${index}]: 缺少 userPrompt`);
+    });
+  }
+
+  // 检查 combinations
+  if (!data.combinations || !Array.isArray(data.combinations)) {
+    errors.push('缺少 combinations 数组');
+  } else {
+    data.combinations.forEach((combo, index) => {
+      if (!combo.id) errors.push(`combinations[${index}]: 缺少 id`);
+      if (!combo.name) errors.push(`combinations[${index}]: 缺少 name`);
+      if (!combo.modelId) errors.push(`combinations[${index}]: 缺少 modelId`);
+      if (!combo.promptId) errors.push(`combinations[${index}]: 缺少 promptId`);
+    });
+  }
+
+  if (errors.length > 0) {
+    throw new Error('格式验证失败:\n' + errors.join('\n'));
+  }
+
+  return true;
+}
+
+// 打开 JSON 粘贴导入模态框
+document.getElementById('importJsonBtn')?.addEventListener('click', () => {
+  document.getElementById('jsonImportTextarea').value = '';
+  document.getElementById('jsonImportError').style.display = 'none';
+  document.getElementById('jsonImportError').textContent = '';
+  openModal('jsonImportModal');
+});
+
+// 确认 JSON 导入
+document.getElementById('confirmJsonImportBtn')?.addEventListener('click', async () => {
+  const textarea = document.getElementById('jsonImportTextarea');
+  const errorDiv = document.getElementById('jsonImportError');
+  const jsonText = textarea.value.trim();
+
+  if (!jsonText) {
+    errorDiv.textContent = '请输入 JSON 配置';
+    errorDiv.style.display = 'block';
+    return;
+  }
+
+  try {
+    // 解析 JSON
+    let importedData;
+    try {
+      importedData = JSON.parse(jsonText);
+    } catch (parseError) {
+      throw new Error('JSON 格式错误: ' + parseError.message);
+    }
+
+    // 验证格式
+    validateConfig(importedData);
+
+    // 确认是否覆盖
+    if (configData.models.length > 0 || configData.prompts.length > 0) {
+      if (!confirm(`导入将覆盖现有配置：\n- ${importedData.models.length} 个模型\n- ${importedData.prompts.length} 个 Prompt\n- ${importedData.combinations.length} 个组合\n\n是否继续？`)) {
+        return;
+      }
+    }
+
+    // 导入配置
+    configData.models = importedData.models;
+    configData.prompts = importedData.prompts;
+    configData.combinations = importedData.combinations;
+
+    if (await saveConfig()) {
+      closeModal('jsonImportModal');
+      renderAll();
+      alert('配置导入成功！');
+    }
+  } catch (error) {
+    errorDiv.textContent = error.message;
+    errorDiv.style.display = 'block';
+  }
+});

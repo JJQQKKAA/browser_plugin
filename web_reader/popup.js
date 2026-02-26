@@ -5,7 +5,8 @@ const elements = {
   noConfig: document.getElementById('noConfig'),
   mainContent: document.getElementById('mainContent'),
   pageTitle: document.getElementById('pageTitle'),
-  comboSelect: document.getElementById('comboSelect'),
+  modelSelect: document.getElementById('modelSelect'),
+  promptSelect: document.getElementById('promptSelect'),
   summarizeBtn: document.getElementById('summarizeBtn'),
   btnText: document.getElementById('btnText'),
   result: document.getElementById('result'),
@@ -26,7 +27,8 @@ let currentUrl = null;
 let isSummarizing = false;
 let isChatting = false;
 let abortController = null;
-let selectedComboId = null;
+let selectedModelId = null;
+let selectedPromptId = null;
 let chatHistory = []; // 对话历史
 let currentModel = null; // 当前使用的模型
 let isInitialSummary = false; // 是否是第一次总结（初始总结不显示用户输入）
@@ -67,51 +69,83 @@ async function checkConfig() {
   }
 }
 
-// 渲染组合选择器
-async function renderComboSelector() {
-  const select = elements.comboSelect;
-  select.innerHTML = '<option value="">选择模型+Prompt组合...</option>';
+// 渲染模型选择器
+async function renderModelSelector() {
+  const select = elements.modelSelect;
+  select.innerHTML = '<option value="">选择模型...</option>';
 
-  if (!configData || !configData.combinations) return;
+  if (!configData || !configData.models) return;
 
-  // 获取上次使用的组合
-  const lastUsed = await chrome.storage.local.get('lastUsedComboId');
-  const lastUsedId = lastUsed.lastUsedComboId;
+  // 获取上次使用的模型
+  const lastUsed = await chrome.storage.local.get('lastUsedModelId');
+  const lastUsedId = lastUsed.lastUsedModelId;
 
-  configData.combinations.forEach(combo => {
-    const model = configData.models.find(m => m.id === combo.modelId);
-    const prompt = configData.prompts.find(p => p.id === combo.promptId);
+  configData.models.forEach(model => {
+    const option = document.createElement('option');
+    option.value = model.id;
+    option.textContent = model.name;
 
-    if (model && prompt) {
-      const option = document.createElement('option');
-      option.value = combo.id;
-      option.textContent = `${combo.name} (${model.name} + ${prompt.shortName})`;
-
-      // 默认选中默认组合或上次使用的组合
-      if (combo.isDefault && !lastUsedId) {
-        option.selected = true;
-        selectedComboId = combo.id;
-      } else if (combo.id === lastUsedId) {
-        option.selected = true;
-        selectedComboId = combo.id;
-      }
-
-      select.appendChild(option);
+    // 默认选中上次使用的模型
+    if (model.id === lastUsedId) {
+      option.selected = true;
+      selectedModelId = model.id;
     }
+
+    select.appendChild(option);
   });
 
   // 如果没有选中的，选第一个
-  if (!selectedComboId && configData.combinations.length > 0) {
-    select.value = configData.combinations[0].id;
-    selectedComboId = configData.combinations[0].id;
+  if (!selectedModelId && configData.models.length > 0) {
+    select.value = configData.models[0].id;
+    selectedModelId = configData.models[0].id;
   }
 }
 
-// 处理组合选择变化
-elements.comboSelect?.addEventListener('change', (e) => {
-  selectedComboId = e.target.value;
-  if (selectedComboId) {
-    chrome.storage.local.set({ lastUsedComboId: selectedComboId });
+// 渲染 Prompt 选择器
+async function renderPromptSelector() {
+  const select = elements.promptSelect;
+  select.innerHTML = '<option value="">选择 Prompt...</option>';
+
+  if (!configData || !configData.prompts) return;
+
+  // 获取上次使用的 Prompt
+  const lastUsed = await chrome.storage.local.get('lastUsedPromptId');
+  const lastUsedId = lastUsed.lastUsedPromptId;
+
+  configData.prompts.forEach(prompt => {
+    const option = document.createElement('option');
+    option.value = prompt.id;
+    option.textContent = prompt.shortName;
+
+    // 默认选中上次使用的 Prompt
+    if (prompt.id === lastUsedId) {
+      option.selected = true;
+      selectedPromptId = prompt.id;
+    }
+
+    select.appendChild(option);
+  });
+
+  // 如果没有选中的，选第一个
+  if (!selectedPromptId && configData.prompts.length > 0) {
+    select.value = configData.prompts[0].id;
+    selectedPromptId = configData.prompts[0].id;
+  }
+}
+
+// 处理模型选择变化
+elements.modelSelect?.addEventListener('change', (e) => {
+  selectedModelId = e.target.value;
+  if (selectedModelId) {
+    chrome.storage.local.set({ lastUsedModelId: selectedModelId });
+  }
+});
+
+// 处理 Prompt 选择变化
+elements.promptSelect?.addEventListener('change', (e) => {
+  selectedPromptId = e.target.value;
+  if (selectedPromptId) {
+    chrome.storage.local.set({ lastUsedPromptId: selectedPromptId });
   }
 });
 
@@ -139,7 +173,8 @@ async function saveState(state) {
       tabId: currentTabId,
       url: currentUrl,
       title: elements.pageTitle.textContent,
-      comboId: selectedComboId,
+      modelId: selectedModelId,
+      promptId: selectedPromptId,
       chatHistory: chatHistory,
       ...state
     });
@@ -153,10 +188,15 @@ async function restoreState() {
   try {
     const response = await chrome.runtime.sendMessage({ type: 'GET_SUMMARY_STATE' });
     if (response.state && response.state.tabId === currentTabId && response.state.url === currentUrl) {
-      // 恢复组合选择
-      if (response.state.comboId) {
-        elements.comboSelect.value = response.state.comboId;
-        selectedComboId = response.state.comboId;
+      // 恢复模型选择
+      if (response.state.modelId) {
+        elements.modelSelect.value = response.state.modelId;
+        selectedModelId = response.state.modelId;
+      }
+      // 恢复 Prompt 选择
+      if (response.state.promptId) {
+        elements.promptSelect.value = response.state.promptId;
+        selectedPromptId = response.state.promptId;
       }
 
       // 恢复对话历史
@@ -331,20 +371,21 @@ function updateLastAssistantMessage(content) {
 
 // 调用 API 进行总结（初始化对话）
 async function summarizeContent(content) {
-  if (!selectedComboId) {
-    throw new Error('请先选择一个模型+Prompt组合');
+  if (!selectedModelId) {
+    throw new Error('请先选择一个模型');
+  }
+  if (!selectedPromptId) {
+    throw new Error('请先选择一个 Prompt');
   }
 
-  const combo = configData.combinations.find(c => c.id === selectedComboId);
-  if (!combo) {
-    throw new Error('选中的组合不存在');
+  const model = configData.models.find(m => m.id === selectedModelId);
+  const prompt = configData.prompts.find(p => p.id === selectedPromptId);
+
+  if (!model) {
+    throw new Error('选中的模型不存在');
   }
-
-  const model = configData.models.find(m => m.id === combo.modelId);
-  const prompt = configData.prompts.find(p => p.id === combo.promptId);
-
-  if (!model || !prompt) {
-    throw new Error('模型或 Prompt 配置不完整');
+  if (!prompt) {
+    throw new Error('选中的 Prompt 不存在');
   }
 
   // 保存当前模型配置
@@ -512,8 +553,12 @@ function hideError() {
 
 // 处理总结按钮点击
 async function handleSummarize() {
-  if (!selectedComboId) {
-    showError('请先选择一个模型+Prompt组合');
+  if (!selectedModelId) {
+    showError('请先选择一个模型');
+    return;
+  }
+  if (!selectedPromptId) {
+    showError('请先选择一个 Prompt');
     return;
   }
 
@@ -625,7 +670,8 @@ async function init() {
   const hasConfig = await checkConfig();
   if (!hasConfig) return;
 
-  await renderComboSelector();
+  await renderModelSelector();
+  await renderPromptSelector();
   await getCurrentTabInfo();
   await restoreState();
 }
