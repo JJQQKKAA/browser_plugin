@@ -28,15 +28,26 @@
         <span id="pageTitle" class="page-title"></span>
       </div>
 
-      <div class="combo-selector">
-        <select id="modelSelect">
-          <option value="">选择模型...</option>
-        </select>
+      <div id="configHeader" class="config-header">
+        <span class="config-label">配置</span>
+        <button id="toggleConfigBtn" class="icon-btn" title="展开/收起配置">
+          <svg id="toggleConfigIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
       </div>
-      <div class="combo-selector">
-        <select id="promptSelect">
-          <option value="">选择 Prompt...</option>
-        </select>
+
+      <div id="configPanel" class="config-panel collapsed">
+        <div class="combo-selector">
+          <select id="modelSelect">
+            <option value="">选择模型...</option>
+          </select>
+        </div>
+        <div class="combo-selector">
+          <select id="promptSelect">
+            <option value="">选择 Prompt...</option>
+          </select>
+        </div>
       </div>
 
       <button id="summarizeBtn" class="btn btn-primary btn-large">

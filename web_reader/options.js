@@ -86,7 +86,6 @@ async function saveConfig() {
 function renderAll() {
   renderModels();
   renderPrompts();
-  renderCombinations();
 }
 
 // 渲染模型列表
@@ -147,37 +146,6 @@ function renderPrompts() {
         </div>
         <div class="hint">
           <strong>User:</strong> ${escapeHtml(prompt.userPrompt?.substring(0, 50) || '')}...
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-// 渲染组合列表
-function renderCombinations() {
-  const container = document.getElementById('comboList');
-  if (configData.combinations.length === 0) {
-    container.innerHTML = '<div class="empty-state">暂无组合，请点击下方按钮添加</div>';
-    return;
-  }
-
-  container.innerHTML = configData.combinations.map(combo => {
-    const model = configData.models.find(m => m.id === combo.modelId);
-    const prompt = configData.prompts.find(p => p.id === combo.promptId);
-    return `
-      <div class="item-card ${combo.isDefault ? 'default' : ''}" data-combo-id="${combo.id}">
-        <div class="item-header">
-          <span class="item-title">
-            ${escapeHtml(combo.name)}
-            ${combo.isDefault ? '<span class="default-badge">默认</span>' : ''}
-          </span>
-          <div class="item-actions">
-            <button class="btn btn-small btn-secondary edit-combo" data-id="${combo.id}">编辑</button>
-            <button class="btn btn-small btn-danger delete-combo" data-id="${combo.id}">删除</button>
-          </div>
-        </div>
-        <div class="hint" style="margin-top:8px;">
-          模型: ${escapeHtml(model?.name || '未知')} | Prompt: ${escapeHtml(prompt?.shortName || '未知')}
         </div>
       </div>
     `;
@@ -399,100 +367,6 @@ async function copyPrompt(id) {
   }
 }
 
-// ===== 组合操作 =====
-
-document.getElementById('addComboBtn').addEventListener('click', () => {
-  if (configData.models.length === 0 || configData.prompts.length === 0) {
-    alert('请先至少添加一个模型和一个 Prompt');
-    return;
-  }
-
-  document.getElementById('comboId').value = '';
-  document.getElementById('comboModalTitle').textContent = '添加组合';
-
-  // 填充选择框
-  const modelSelect = document.getElementById('comboModelSelect');
-  const promptSelect = document.getElementById('comboPromptSelect');
-
-  modelSelect.innerHTML = '<option value="">选择模型...</option>' +
-    configData.models.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
-
-  promptSelect.innerHTML = '<option value="">选择 Prompt...</option>' +
-    configData.prompts.map(p => `<option value="${p.id}">${escapeHtml(p.shortName)}</option>`).join('');
-
-  document.getElementById('comboIsDefault').checked = false;
-  openModal('comboModal');
-});
-
-document.getElementById('saveComboBtn').addEventListener('click', async () => {
-  const id = document.getElementById('comboId').value;
-  const name = document.getElementById('comboName').value.trim();
-  const modelId = document.getElementById('comboModelSelect').value;
-  const promptId = document.getElementById('comboPromptSelect').value;
-  const isDefault = document.getElementById('comboIsDefault').checked;
-
-  if (!name || !modelId || !promptId) {
-    alert('请填写组合名称并选择模型和 Prompt');
-    return;
-  }
-
-  // 如果设为默认，清除其他默认
-  if (isDefault) {
-    configData.combinations.forEach(c => c.isDefault = false);
-  }
-
-  const comboData = {
-    id: id || generateId('combo'),
-    name,
-    modelId,
-    promptId,
-    isDefault: isDefault || configData.combinations.length === 0
-  };
-
-  if (id) {
-    const index = configData.combinations.findIndex(c => c.id === id);
-    if (index !== -1) configData.combinations[index] = comboData;
-  } else {
-    configData.combinations.push(comboData);
-  }
-
-  if (await saveConfig()) {
-    closeModal('comboModal');
-    renderAll();
-  }
-});
-
-function editCombo(id) {
-  const combo = configData.combinations.find(c => c.id === id);
-  if (!combo) return;
-
-  document.getElementById('comboId').value = combo.id;
-  document.getElementById('comboName').value = combo.name;
-  document.getElementById('comboIsDefault').checked = combo.isDefault;
-
-  const modelSelect = document.getElementById('comboModelSelect');
-  const promptSelect = document.getElementById('comboPromptSelect');
-
-  modelSelect.innerHTML = '<option value="">选择模型...</option>' +
-    configData.models.map(m => `<option value="${m.id}" ${m.id === combo.modelId ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
-
-  promptSelect.innerHTML = '<option value="">选择 Prompt...</option>' +
-    configData.prompts.map(p => `<option value="${p.id}" ${p.id === combo.promptId ? 'selected' : ''}>${escapeHtml(p.shortName)}</option>`).join('');
-
-  document.getElementById('comboModalTitle').textContent = '编辑组合';
-  openModal('comboModal');
-}
-
-async function deleteCombo(id) {
-  if (!confirm('确定要删除这个组合吗？')) return;
-
-  configData.combinations = configData.combinations.filter(c => c.id !== id);
-
-  if (await saveConfig()) {
-    renderAll();
-  }
-}
-
 // 关闭模态框按钮事件
 document.querySelectorAll('[data-close-modal]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -533,19 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 组合列表事件委托
-  document.getElementById('comboList').addEventListener('click', (e) => {
-    const target = e.target;
-    if (target.classList.contains('edit-combo')) {
-      e.preventDefault();
-      editCombo(target.dataset.id);
-    } else if (target.classList.contains('delete-combo')) {
-      e.preventDefault();
-      deleteCombo(target.dataset.id);
-    }
-  });
-
-  // 模态框关闭按钮事件（动态添加的需要在这里处理）
+    // 模态框关闭按钮事件（动态添加的需要在这里处理）
   document.querySelectorAll('[data-close-modal]').forEach(btn => {
     btn.addEventListener('click', () => {
       const modalId = btn.dataset.closeModal;
@@ -616,9 +478,6 @@ document.getElementById('importFileInput')?.addEventListener('change', async (e)
     }
     if (!importedData.prompts || !Array.isArray(importedData.prompts)) {
       throw new Error('配置文件格式错误：缺少 prompts 数组');
-    }
-    if (!importedData.combinations || !Array.isArray(importedData.combinations)) {
-      throw new Error('配置文件格式错误：缺少 combinations 数组');
     }
 
     // 验证每个模型的必需字段
@@ -695,18 +554,6 @@ function validateConfig(data) {
     });
   }
 
-  // 检查 combinations
-  if (!data.combinations || !Array.isArray(data.combinations)) {
-    errors.push('缺少 combinations 数组');
-  } else {
-    data.combinations.forEach((combo, index) => {
-      if (!combo.id) errors.push(`combinations[${index}]: 缺少 id`);
-      if (!combo.name) errors.push(`combinations[${index}]: 缺少 name`);
-      if (!combo.modelId) errors.push(`combinations[${index}]: 缺少 modelId`);
-      if (!combo.promptId) errors.push(`combinations[${index}]: 缺少 promptId`);
-    });
-  }
-
   if (errors.length > 0) {
     throw new Error('格式验证失败:\n' + errors.join('\n'));
   }
@@ -748,7 +595,7 @@ document.getElementById('confirmJsonImportBtn')?.addEventListener('click', async
 
     // 确认是否覆盖
     if (configData.models.length > 0 || configData.prompts.length > 0) {
-      if (!confirm(`导入将覆盖现有配置：\n- ${importedData.models.length} 个模型\n- ${importedData.prompts.length} 个 Prompt\n- ${importedData.combinations.length} 个组合\n\n是否继续？`)) {
+      if (!confirm(`导入将覆盖现有配置：\n- ${importedData.models.length} 个模型\n- ${importedData.prompts.length} 个 Prompt\n\n是否继续？`)) {
         return;
       }
     }
@@ -756,7 +603,8 @@ document.getElementById('confirmJsonImportBtn')?.addEventListener('click', async
     // 导入配置
     configData.models = importedData.models;
     configData.prompts = importedData.prompts;
-    configData.combinations = importedData.combinations;
+    // 如果导入的数据有 combinations，保留它；否则清空
+    configData.combinations = importedData.combinations || [];
 
     if (await saveConfig()) {
       closeModal('jsonImportModal');

@@ -196,7 +196,6 @@
     <div class="tabs">
       <button class="tab active" data-tab="models">模型配置</button>
       <button class="tab" data-tab="prompts">Prompt 配置</button>
-      <button class="tab" data-tab="combinations">组合配置</button>
     </div>
 
     <!-- 数据操作栏 -->
@@ -221,12 +220,6 @@
       <button id="addPromptBtn" class="btn btn-primary">+ 添加 Prompt</button>
     </div>
 
-    <!-- 组合配置 -->
-    <div id="combinations" class="tab-content">
-      <h2>模型 + Prompt 组合</h2>
-      <div id="comboList" class="item-list"></div>
-      <button id="addComboBtn" class="btn btn-primary">+ 添加组合</button>
-    </div>
   </div>
 
   <!-- 模型编辑模态框 -->
@@ -288,41 +281,6 @@
       <div class="btn-group">
         <button id="savePromptBtn" class="btn btn-primary">保存</button>
         <button class="btn btn-secondary close-modal-btn" data-close-modal="promptModal">取消</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 组合编辑模态框 -->
-  <div id="comboModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 class="modal-title" id="comboModalTitle">添加组合</h3>
-        <button class="close-btn" data-close-modal="comboModal">&times;</button>
-      </div>
-      <input type="hidden" id="comboId">
-      <div class="form-group">
-        <label for="comboName">组合名称 *</label>
-        <input type="text" id="comboName" placeholder="例如：GPT-4 总结">
-      </div>
-      <div class="form-group">
-        <label>选择模型和 Prompt *</label>
-        <div class="combo-select-row">
-          <select id="comboModelSelect">
-            <option value="">选择模型...</option>
-          </select>
-          <select id="comboPromptSelect">
-            <option value="">选择 Prompt...</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>
-          <input type="checkbox" id="comboIsDefault"> 设为默认组合
-        </label>
-      </div>
-      <div class="btn-group">
-        <button id="saveComboBtn" class="btn btn-primary">保存</button>
-        <button class="btn btn-secondary close-modal-btn" data-close-modal="comboModal">取消</button>
       </div>
     </div>
   </div>

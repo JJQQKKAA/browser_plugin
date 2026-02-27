@@ -5,6 +5,8 @@ const elements = {
   noConfig: document.getElementById('noConfig'),
   mainContent: document.getElementById('mainContent'),
   pageTitle: document.getElementById('pageTitle'),
+  configHeader: document.getElementById('configHeader'),
+  configPanel: document.getElementById('configPanel'),
   modelSelect: document.getElementById('modelSelect'),
   promptSelect: document.getElementById('promptSelect'),
   summarizeBtn: document.getElementById('summarizeBtn'),
@@ -657,6 +659,7 @@ async function copyResult() {
     }, 1500);
   } catch (error) {
     console.error('复制失败:', error);
+    showError('复制失败: ' + (error.message || '请检查剪贴板权限'));
   }
 }
 
@@ -681,6 +684,39 @@ async function init() {
     }
   });
 
+  // 配置面板收起/展开
+  elements.configHeader?.addEventListener('click', () => {
+    elements.configPanel.classList.toggle('collapsed');
+    elements.configHeader.classList.toggle('expanded');
+  });
+
+  // 加载配置面板的收起状态
+  const configState = await chrome.storage.local.get('configPanelCollapsed');
+  if (configState.configPanelCollapsed !== false) {
+    elements.configPanel.classList.add('collapsed');
+    elements.configHeader.classList.remove('expanded');
+  } else {
+    elements.configPanel.classList.remove('collapsed');
+    elements.configHeader.classList.add('expanded');
+  }
+
+  // 监听配置选择变化，自动收起面板
+  elements.modelSelect?.addEventListener('change', async () => {
+    if (selectedModelId && selectedPromptId) {
+      elements.configPanel.classList.add('collapsed');
+      elements.configHeader.classList.remove('expanded');
+      await chrome.storage.local.set({ configPanelCollapsed: true });
+    }
+  });
+
+  elements.promptSelect?.addEventListener('change', async () => {
+    if (selectedModelId && selectedPromptId) {
+      elements.configPanel.classList.add('collapsed');
+      elements.configHeader.classList.remove('expanded');
+      await chrome.storage.local.set({ configPanelCollapsed: true });
+    }
+  });
+
   const hasConfig = await checkConfig();
   if (!hasConfig) return;
 
@@ -688,6 +724,12 @@ async function init() {
   await renderPromptSelector();
   await getCurrentTabInfo();
   await restoreState();
+
+  // 如果已经选择了模型和 Prompt，自动收起配置面板
+  if (selectedModelId && selectedPromptId) {
+    elements.configPanel?.classList.add('collapsed');
+    elements.configHeader?.classList.remove('expanded');
+  }
 }
 
 // DOM 加载完成后初始化

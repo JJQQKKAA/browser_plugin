@@ -219,6 +219,59 @@ textarea {
   margin-top: 8px;
 }
 
+/* 配置面板收起/展开 */
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.config-label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #666;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.icon-btn:hover {
+  background: #e8e8e8;
+  color: #333;
+}
+
+.icon-btn.expanded #toggleConfigIcon {
+  transform: rotate(180deg);
+}
+
+.config-panel {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+  max-height: 200px;
+  opacity: 1;
+}
+
+.config-panel.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+}
+
 .combo-selector select:focus {
   outline: none;
   border-color: #4a90d9;

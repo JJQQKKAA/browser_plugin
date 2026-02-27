@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Web Reader - AI 网页总结",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "使用自定义 AI 模型和 Prompt 总结网页内容",
   "permissions": [
     "activeTab",
@@ -9,8 +9,12 @@
     "scripting"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "http://*/",
+    "https://*/"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -31,7 +35,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"]
     }
   ]
