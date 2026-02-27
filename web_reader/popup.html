@@ -10,12 +10,19 @@
   <div class="popup-container">
     <div class="popup-header">
       <h1>Web Reader</h1>
-      <a href="#" id="openOptions" class="icon-link" title="打开配置">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.22 4.22l-4.24-4.24M6.34 6.34L2.1 2.1"></path>
-        </svg>
-      </a>
+      <div class="header-actions">
+        <button id="toggleConfigBtn" class="icon-btn" title="展开/收起配置">
+          <svg id="toggleConfigIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <a href="#" id="openOptions" class="icon-link" title="打开配置">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.22 4.22l-4.24-4.24M6.34 6.34L2.1 2.1"></path>
+          </svg>
+        </a>
+      </div>
     </div>
 
     <div id="noConfig" class="message-box hidden">
@@ -28,13 +35,8 @@
         <span id="pageTitle" class="page-title"></span>
       </div>
 
-      <div id="configHeader" class="config-header">
+      <div id="configHeader" class="config-header hidden">
         <span class="config-label">配置</span>
-        <button id="toggleConfigBtn" class="icon-btn" title="展开/收起配置">
-          <svg id="toggleConfigIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
       </div>
 
       <div id="configPanel" class="config-panel collapsed">

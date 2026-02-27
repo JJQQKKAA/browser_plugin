@@ -127,10 +127,10 @@ textarea {
 }
 
 .btn-large {
-  padding: 14px 28px;
-  font-size: 16px;
+  padding: 12px 24px;
+  font-size: 15px;
   width: 100%;
-  margin: 16px 0;
+  margin: 10px 0;
 }
 
 .btn-small {
@@ -166,21 +166,27 @@ textarea {
 }
 
 .popup-container {
-  padding: 16px;
+  padding: 12px;
 }
 
 .popup-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #eee;
 }
 
 .popup-header h1 {
   font-size: 18px;
   margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .icon-link {
@@ -196,12 +202,35 @@ textarea {
   color: #4a90d9;
 }
 
+/* 头部配置按钮 */
+.header-actions .icon-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #666;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.header-actions .icon-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.header-actions .icon-btn.expanded #toggleConfigIcon {
+  transform: rotate(180deg);
+}
+
 .page-info {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .combo-selector {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .combo-selector select {
@@ -216,19 +245,12 @@ textarea {
 }
 
 .combo-selector + .combo-selector {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 /* 配置面板收起/展开 */
 .config-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: #f8f9fa;
-  border-radius: 6px;
-  margin-bottom: 8px;
-  cursor: pointer;
+  display: none;
 }
 
 .config-label {
@@ -300,17 +322,17 @@ textarea {
 
 /* ===== 结果展示 ===== */
 .result-box {
-  margin-top: 16px;
+  margin-top: 10px;
   background: #f8f9fa;
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px;
 }
 
 .result-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .result-header h3 {
