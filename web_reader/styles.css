@@ -591,13 +591,13 @@ textarea {
 
 .chat-message.user {
   background: #e8f4fd;
-  margin-left: 24px;
+  margin-left: 16px;
   border-left: 3px solid #4a90d9;
 }
 
 .chat-message.assistant {
   background: #f8f9fa;
-  margin-right: 24px;
+  margin-right: 0;
   border-left: 3px solid #28a745;
 }
 
