@@ -449,17 +449,21 @@ document.querySelectorAll('.tab').forEach(tab => {
 
 // ===== 配置导出/导入 =====
 
-// 导出配置
-document.getElementById('exportConfigBtn')?.addEventListener('click', async () => {
-  try {
-    const configToExport = {
-      version: '1.0',
-      exportDate: new Date().toISOString(),
-      models: configData.models,
-      prompts: configData.prompts,
-      combinations: configData.combinations
-    };
+// 获取导出数据
+function getExportData() {
+  return {
+    version: '1.0',
+    exportDate: new Date().toISOString(),
+    models: configData.models,
+    prompts: configData.prompts,
+    combinations: configData.combinations
+  };
+}
 
+// 导出到文件
+document.getElementById('exportFileBtn')?.addEventListener('click', async () => {
+  try {
+    const configToExport = getExportData();
     const blob = new Blob([JSON.stringify(configToExport, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -470,13 +474,62 @@ document.getElementById('exportConfigBtn')?.addEventListener('click', async () =
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('导出配置失败:', error);
-    alert('导出配置失败: ' + error.message);
+    console.error('导出失败:', error);
+    alert('导出失败: ' + error.message);
   }
 });
 
-// 导入配置 - 点击按钮触发文件选择
-document.getElementById('importConfigBtn')?.addEventListener('click', () => {
+// 复制文本到剪切板（带降级方案）
+async function copyToClipboard(text) {
+  // 优先使用现代 Clipboard API
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  // 降级方案：使用 execCommand
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    const success = document.execCommand('copy');
+    if (!success) throw new Error('execCommand failed');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+// 显示按钮成功反馈
+function showButtonSuccess(btnId, successText) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const originalText = btn.textContent;
+  btn.textContent = successText;
+  btn.style.background = '#28a745';
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.style.background = '';
+  }, 1500);
+}
+
+// 导出到剪切板
+document.getElementById('exportClipboardBtn')?.addEventListener('click', async () => {
+  try {
+    const configToExport = getExportData();
+    await copyToClipboard(JSON.stringify(configToExport, null, 2));
+    showButtonSuccess('exportClipboardBtn', '✓ 已复制');
+  } catch (error) {
+    console.error('复制失败:', error);
+    alert('复制失败，请手动复制');
+  }
+});
+
+// 从文件导入 - 点击按钮触发文件选择
+document.getElementById('importFileBtn')?.addEventListener('click', () => {
   document.getElementById('importFileInput').click();
 });
 
@@ -522,15 +575,37 @@ document.getElementById('importFileInput')?.addEventListener('change', async (e)
     // 导入配置
     configData.models = importedData.models;
     configData.prompts = importedData.prompts;
-    configData.combinations = importedData.combinations;
+
+    // 如果没有 combinations，自动创建一个默认组合（使用第一个模型和第一个 prompt）
+    if (!importedData.combinations || importedData.combinations.length === 0) {
+      if (configData.models.length > 0 && configData.prompts.length > 0) {
+        configData.combinations = [{
+          id: generateId('combo'),
+          name: '默认组合',
+          modelId: configData.models[0].id,
+          promptId: configData.prompts[0].id,
+          isDefault: true
+        }];
+      }
+    } else {
+      configData.combinations = importedData.combinations;
+    }
+
+    // 设置默认使用第一个模型和第一个 prompt
+    if (configData.models.length > 0) {
+      await chrome.storage.local.set({ lastUsedModelId: configData.models[0].id });
+    }
+    if (configData.prompts.length > 0) {
+      await chrome.storage.local.set({ lastUsedPromptId: configData.prompts[0].id });
+    }
 
     if (await saveConfig()) {
       renderAll();
-      alert('配置导入成功！');
+      showButtonSuccess('importFileBtn', '✓ 已导入');
     }
   } catch (error) {
     console.error('导入配置失败:', error);
-    alert('导入配置失败: ' + error.message);
+    alert('导入失败: ' + error.message);
   } finally {
     e.target.value = '';
   }
@@ -620,13 +695,34 @@ document.getElementById('confirmJsonImportBtn')?.addEventListener('click', async
     // 导入配置
     configData.models = importedData.models;
     configData.prompts = importedData.prompts;
-    // 如果导入的数据有 combinations，保留它；否则清空
-    configData.combinations = importedData.combinations || [];
+
+    // 如果没有 combinations，自动创建一个默认组合（使用第一个模型和第一个 prompt）
+    if (!importedData.combinations || importedData.combinations.length === 0) {
+      if (configData.models.length > 0 && configData.prompts.length > 0) {
+        configData.combinations = [{
+          id: generateId('combo'),
+          name: '默认组合',
+          modelId: configData.models[0].id,
+          promptId: configData.prompts[0].id,
+          isDefault: true
+        }];
+      }
+    } else {
+      configData.combinations = importedData.combinations;
+    }
+
+    // 设置默认使用第一个模型和第一个 prompt
+    if (configData.models.length > 0) {
+      await chrome.storage.local.set({ lastUsedModelId: configData.models[0].id });
+    }
+    if (configData.prompts.length > 0) {
+      await chrome.storage.local.set({ lastUsedPromptId: configData.prompts[0].id });
+    }
 
     if (await saveConfig()) {
       closeModal('jsonImportModal');
       renderAll();
-      alert('配置导入成功！');
+      showButtonSuccess('importJsonBtn', '✓ 已导入');
     }
   } catch (error) {
     errorDiv.textContent = error.message;
