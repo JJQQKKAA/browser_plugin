@@ -106,7 +106,7 @@ web_reader/
 
 详见 [CHANGELOG.md](CHANGELOG.md)
 
-### 最新版本 v1.2.0
+### 最新版本 v1.0.0
 
 - ✅ 支持模型和 Prompt 的复制功能
 - ✅ 配置导出/导入功能（JSON 格式）

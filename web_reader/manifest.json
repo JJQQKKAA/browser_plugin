@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Web Reader - AI 网页总结",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "description": "使用自定义 AI 模型和 Prompt 总结网页内容",
   "permissions": [
     "activeTab",
