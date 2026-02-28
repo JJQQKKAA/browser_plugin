@@ -35,7 +35,7 @@ let selectedModelId = null;
 let selectedPromptId = null;
 let chatHistory = []; // 对话历史
 let currentModel = null; // 当前使用的模型
-let isInitialSummary = false; // 是否是第一次总结（初始总结不显示用户输入）
+
 
 // 默认字体大小
 const DEFAULT_FONT_SIZE = 13;
@@ -159,21 +159,7 @@ async function renderPromptSelector() {
   }
 }
 
-// 处理模型选择变化
-elements.modelSelect?.addEventListener('change', (e) => {
-  selectedModelId = e.target.value;
-  if (selectedModelId) {
-    chrome.storage.local.set({ lastUsedModelId: selectedModelId });
-  }
-});
-
-// 处理 Prompt 选择变化
-elements.promptSelect?.addEventListener('change', (e) => {
-  selectedPromptId = e.target.value;
-  if (selectedPromptId) {
-    chrome.storage.local.set({ lastUsedPromptId: selectedPromptId });
-  }
-});
+// 注意：change 事件监听器在 init 函数中统一绑定，避免重复绑定
 
 // 获取当前页面信息
 async function getCurrentTabInfo() {
@@ -396,22 +382,43 @@ function renderChatMessage(message, index, isStreaming = false) {
 }
 
 // 渲染所有聊天消息
-// isFirstSummary: 第一次总结时不显示 system 和第一个 user 消息
-function renderChatMessages(isFirstSummary = false) {
+// 永远隐藏 system 和第一个 user 消息（它们是初始总结的上下文，不显示给用户）
+function renderChatMessages(scrollMode = 'bottom') {
   if (!elements.chatMessages) return;
+
+  // 保存当前滚动位置和滚动高度（用于保持相对位置）
+  const oldScrollTop = elements.chatMessages.scrollTop;
+  const oldScrollHeight = elements.chatMessages.scrollHeight;
+  const oldClientHeight = elements.chatMessages.clientHeight;
+  const isNearBottom = oldScrollTop + oldClientHeight >= oldScrollHeight - 50;
 
   elements.chatMessages.innerHTML = '';
 
   chatHistory.forEach((msg, index) => {
-    // 第一次总结时跳过 system 和第一个 user 消息（即索引 0 和 1）
-    if (isFirstSummary && (msg.role === 'system' || index === 1)) {
+    // 永远跳过 system 和第一个 user 消息（即索引 0 和 1）
+    if (msg.role === 'system' || index === 1) {
       return;
     }
     elements.chatMessages.appendChild(renderChatMessage(msg, index));
   });
 
-  // 滚动到底部
-  elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+  // 处理滚动
+  const newScrollHeight = elements.chatMessages.scrollHeight;
+  
+  if (scrollMode === 'none') {
+    // 保持原来的滚动位置
+    elements.chatMessages.scrollTop = oldScrollTop;
+  } else if (scrollMode === 'preserve') {
+    // 保持相对位置（适用于添加新消息时）
+    const heightDiff = newScrollHeight - oldScrollHeight;
+    elements.chatMessages.scrollTop = oldScrollTop + heightDiff;
+  } else if (scrollMode === 'bottom' || isNearBottom) {
+    // 滚动到底部（默认行为，或当用户已经在底部时）
+    elements.chatMessages.scrollTop = newScrollHeight;
+  } else {
+    // 用户不在底部，保持当前位置
+    elements.chatMessages.scrollTop = oldScrollTop;
+  }
 }
 
 // 添加消息到聊天历史
@@ -459,10 +466,7 @@ async function summarizeContent(content) {
     { role: 'user', content: finalUserPrompt }
   ];
 
-  // 标记为第一次总结（不显示用户输入）
-  isInitialSummary = true;
-
-  // 清空消息区域，第一次总结不显示历史
+  // 清空消息区域
   elements.chatMessages.innerHTML = '';
   elements.result.classList.remove('hidden');
   elements.resultContent.classList.add('hidden');
@@ -476,12 +480,9 @@ async function sendChatMessage(userMessage) {
     throw new Error('请先进行总结');
   }
 
-  // 确保不是初始总结模式
-  isInitialSummary = false;
-
   // 添加用户消息到历史
   chatHistory.push({ role: 'user', content: userMessage });
-  renderChatMessages(false);
+  renderChatMessages('preserve'); // 保持相对位置，让新消息显示在视野内
 
   // 添加空的助手消息占位
   chatHistory.push({ role: 'assistant', content: '' });
@@ -543,13 +544,23 @@ async function callAPIWithHistory() {
               // 确保有一条 assistant 消息在 chatHistory 中
               let lastMsg = chatHistory[chatHistory.length - 1];
               if (!lastMsg || lastMsg.role !== 'assistant') {
+                // 不应该发生，因为 sendChatMessage 已经添加了 assistant 消息
+                console.warn('Unexpected: last message is not assistant', lastMsg, 'chatHistory:', JSON.parse(JSON.stringify(chatHistory)));
                 chatHistory.push({ role: 'assistant', content: '' });
                 lastMsg = chatHistory[chatHistory.length - 1];
               }
+              
+              // 调试：检查 lastMsg 是否正确
+              if (lastMsg.role !== 'assistant') {
+                console.error('CRITICAL: lastMsg is not assistant!', lastMsg);
+              }
+              
               lastMsg.content = fullContent;
+              console.log('Updated assistant message:', fullContent.substring(0, 50));
 
-              // 渲染消息，第一次总结不显示 system 和第一个 user
-              renderChatMessages(isInitialSummary);
+              // 渲染消息，保持滚动位置避免页面跳动
+              const scrollMode = isChatting && chatHistory.length > 2 ? 'none' : 'bottom';
+              renderChatMessages(scrollMode);
 
               if (!window.saveStateTimeout) {
                 window.saveStateTimeout = setTimeout(() => {
@@ -566,8 +577,6 @@ async function callAPIWithHistory() {
     }
 
     isChatting = false;
-    // 第一次总结完成后，重置标志位，后续聊天正常显示
-    isInitialSummary = false;
     await saveState({ isLoading: false });
 
     return fullContent;
@@ -800,8 +809,15 @@ async function init() {
   });
 
   // 聊天输入框回车发送
+  let isComposing = false;
+  elements.chatInput?.addEventListener('compositionstart', () => {
+    isComposing = true;
+  });
+  elements.chatInput?.addEventListener('compositionend', () => {
+    isComposing = false;
+  });
   elements.chatInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -830,8 +846,12 @@ async function init() {
     elements.toggleConfigBtn?.classList.add('expanded');
   }
 
-  // 监听配置选择变化，自动收起面板
-  elements.modelSelect?.addEventListener('change', async () => {
+  // 监听配置选择变化
+  elements.modelSelect?.addEventListener('change', async (e) => {
+    selectedModelId = e.target.value;
+    if (selectedModelId) {
+      chrome.storage.local.set({ lastUsedModelId: selectedModelId });
+    }
     if (selectedModelId && selectedPromptId) {
       elements.configPanel.classList.add('collapsed');
       elements.toggleConfigBtn?.classList.remove('expanded');
@@ -839,7 +859,11 @@ async function init() {
     }
   });
 
-  elements.promptSelect?.addEventListener('change', async () => {
+  elements.promptSelect?.addEventListener('change', async (e) => {
+    selectedPromptId = e.target.value;
+    if (selectedPromptId) {
+      chrome.storage.local.set({ lastUsedPromptId: selectedPromptId });
+    }
     if (selectedModelId && selectedPromptId) {
       elements.configPanel.classList.add('collapsed');
       elements.toggleConfigBtn?.classList.remove('expanded');
