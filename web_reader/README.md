@@ -89,19 +89,45 @@
 
 ```
 web_reader/
-├── manifest.json      # 插件配置
-├── background.js      # 后台服务 worker（保持状态）
-├── popup.html         # 弹窗界面
-├── popup.js           # 弹窗逻辑
-├── options.html       # 配置页面
-├── options.js         # 配置逻辑
-├── content.js         # 内容提取
-├── marked.min.js      # Markdown 渲染库
-├── styles.css         # 样式文件
-├── icon16.png         # 图标 (16x16)
-├── icon48.png         # 图标 (48x48)
-└── icon128.png        # 图标 (128x128)
+├── 📄 manifest.json      # 插件配置 (Manifest V3)
+├── 🔄 background.js      # Service Worker（状态保持）
+├── 🪟 popup.html         # 弹窗界面
+├── ⚙️ popup.js           # 弹窗逻辑
+├── 🔧 options.html       # 配置页面
+├── ⚙️ options.js         # 配置逻辑
+├── 📑 content.js         # 内容提取脚本
+├── 📝 marked.min.js      # Markdown 渲染库
+├── 🎨 styles.css         # 样式文件
+├── 🖼️ icon*.png          # 图标文件
+└── 📖 README.md          # 本文件
 ```
+
+## 更新日志
+
+详见 [CHANGELOG.md](CHANGELOG.md)
+
+### 最新版本 v1.2.0
+
+- ✅ 支持模型和 Prompt 的复制功能
+- ✅ 配置导出/导入功能（JSON 格式）
+- ✅ 新增隐私政策文件
+- ✅ 优化权限声明
+
+## 隐私政策
+
+我们高度重视用户隐私。所有配置数据仅保存在本地，不会上传到任何服务器。
+
+详见 [PRIVACY.md](PRIVACY.md)
+
+## 许可证
+
+[MIT License](LICENSE) © 2026 Web Reader Contributors
+
+---
+
+<p align="center">
+  如果这个项目对你有帮助，请给个 ⭐ Star！
+</p>
 
 ## 注意事项
 

@@ -429,6 +429,14 @@ textarea {
   margin: 4px 0;
 }
 
+/* 列表内的标题重置缩进 - 防止二级标题在列表中错位 */
+.result-content li h1,
+.result-content li h2,
+.result-content li h3,
+.result-content li h4 {
+  margin-left: -20px;
+}
+
 .result-content code {
   background: #f0f0f0;
   padding: 2px 5px;
@@ -641,6 +649,14 @@ textarea {
 
 .chat-message-content li {
   margin: 2px 0;
+}
+
+/* 列表内的标题重置缩进 */
+.chat-message-content li h1,
+.chat-message-content li h2,
+.chat-message-content li h3,
+.chat-message-content li h4 {
+  margin-left: -16px;
 }
 
 .chat-message-content code {
