@@ -19,7 +19,7 @@ const elements = {
   copyBtn: document.getElementById('copyBtn'),
   increaseFontBtn: document.getElementById('increaseFontBtn'),
   decreaseFontBtn: document.getElementById('decreaseFontBtn'),
-  loading: document.getElementById('loading'),
+  headerLoading: document.getElementById('headerLoading'),
   loadingText: document.getElementById('loadingText'),
   error: document.getElementById('error')
 };
@@ -533,12 +533,13 @@ async function callAPIWithHistory() {
 // 显示加载状态
 function setLoading(isLoading, text = '正在处理...') {
   if (isLoading) {
-    elements.loading.classList.remove('hidden');
+    elements.headerLoading.classList.remove('hidden');
     elements.loadingText.textContent = text;
     elements.summarizeBtn.disabled = true;
     elements.summarizeBtn.classList.add('loading');
   } else {
-    elements.loading.classList.add('hidden');
+    elements.headerLoading.classList.add('hidden');
+    elements.loadingText.textContent = '';
     elements.summarizeBtn.disabled = false;
     elements.summarizeBtn.classList.remove('loading');
   }

@@ -9,7 +9,13 @@
 <body class="popup-page">
   <div class="popup-container">
     <div class="popup-header">
-      <h1>Web Reader</h1>
+      <div class="header-left">
+        <h1>Web Reader</h1>
+        <div id="headerLoading" class="header-loading hidden">
+          <div class="spinner-small"></div>
+          <span id="loadingText"></span>
+        </div>
+      </div>
       <div class="header-actions">
         <button id="summarizeBtn" class="icon-btn" title="总结当前页面">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -84,10 +90,7 @@
         </div>
       </div>
 
-      <div id="loading" class="loading hidden">
-        <div class="spinner"></div>
-        <span id="loadingText">正在提取内容...</span>
-      </div>
+
 
       <div id="error" class="error-box hidden"></div>
     </div>
