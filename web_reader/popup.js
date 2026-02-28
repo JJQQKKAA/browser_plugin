@@ -1,6 +1,7 @@
 // 获取 DOM 元素
 const elements = {
   openOptions: document.getElementById('openOptions'),
+  openInWindow: document.getElementById('openInWindow'),
   gotoConfig: document.getElementById('gotoConfig'),
   noConfig: document.getElementById('noConfig'),
   mainContent: document.getElementById('mainContent'),
@@ -35,6 +36,28 @@ let selectedPromptId = null;
 let chatHistory = []; // 对话历史
 let currentModel = null; // 当前使用的模型
 let isInitialSummary = false; // 是否是第一次总结（初始总结不显示用户输入）
+
+// 默认字体大小
+const DEFAULT_FONT_SIZE = 13;
+
+// 加载字体大小
+async function loadFontSize() {
+  try {
+    const result = await chrome.storage.local.get('webReaderFontSize');
+    return result.webReaderFontSize || DEFAULT_FONT_SIZE;
+  } catch (error) {
+    return DEFAULT_FONT_SIZE;
+  }
+}
+
+// 保存字体大小
+async function saveFontSize(fontSize) {
+  try {
+    await chrome.storage.local.set({ webReaderFontSize: fontSize });
+  } catch (error) {
+    console.error('保存字体大小失败:', error);
+  }
+}
 
 // 检查配置
 async function checkConfig() {
@@ -155,11 +178,27 @@ elements.promptSelect?.addEventListener('change', (e) => {
 // 获取当前页面信息
 async function getCurrentTabInfo() {
   try {
+    // 如果是独立窗口模式，尝试从 background 获取最后活跃的标签页
+    if (isWindowMode) {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_LAST_ACTIVE_TAB' });
+      if (response && response.tab) {
+        elements.pageTitle.textContent = response.tab.title || '未知页面';
+        currentTabId = response.tab.id;
+        currentUrl = response.tab.url;
+        return response.tab;
+      }
+      elements.pageTitle.textContent = '请在浏览器中选择页面';
+      return null;
+    }
+    
+    // 正常 popup 模式
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
       elements.pageTitle.textContent = tab.title || '未知页面';
       currentTabId = tab.id;
       currentUrl = tab.url;
+      // 通知 background 记录最后活跃标签页
+      chrome.runtime.sendMessage({ type: 'SET_LAST_ACTIVE_TAB', tab: { id: tab.id, url: tab.url, title: tab.title } });
       return tab;
     }
   } catch (error) {
@@ -241,11 +280,24 @@ async function clearState() {
 // 提取页面内容
 async function extractPageContent() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) throw new Error('无法获取当前页面');
+    let tabId;
+    
+    // 如果是独立窗口模式，从 background 获取最后活跃的标签页
+    if (isWindowMode) {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_LAST_ACTIVE_TAB' });
+      if (!response || !response.tab) {
+        throw new Error('无法获取当前页面，请在浏览器中先打开一个页面');
+      }
+      tabId = response.tab.id;
+    } else {
+      // 正常 popup 模式
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) throw new Error('无法获取当前页面');
+      tabId = tab.id;
+    }
 
     const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId: tabId },
       func: () => {
         if (window.webReaderExtractContent) {
           const result = window.webReaderExtractContent();
@@ -642,6 +694,46 @@ function openOptions() {
   chrome.runtime.openOptionsPage();
 }
 
+// 在新窗口打开
+async function openInNewWindow() {
+  try {
+    const width = Math.min(900, screen.availWidth - 100);
+    const height = Math.min(700, screen.availHeight - 100);
+    const left = Math.round((screen.availWidth - width) / 2);
+    const top = Math.round((screen.availHeight - height) / 2);
+    
+    // 保存当前状态到 storage，让新窗口可以恢复
+    const windowState = {
+      chatHistory: chatHistory,
+      currentModel: currentModel,
+      selectedModelId: selectedModelId,
+      selectedPromptId: selectedPromptId,
+      currentTabId: currentTabId,
+      currentUrl: currentUrl,
+      pageTitle: elements.pageTitle.textContent,
+      isWindowMode: true,
+      timestamp: Date.now()
+    };
+    
+    await chrome.storage.local.set({ windowModeState: windowState });
+    
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('popup.html?window=true'),
+      type: 'popup',
+      width: width,
+      height: height,
+      left: left,
+      top: top
+    });
+    
+    // 关闭当前 popup
+    window.close();
+  } catch (error) {
+    console.error('打开新窗口失败:', error);
+    showError('打开新窗口失败: ' + error.message);
+  }
+}
+
 // 复制结果
 async function copyResult() {
   // 复制整个对话或最后一条消息
@@ -673,6 +765,8 @@ async function init() {
     e.preventDefault();
     openOptions();
   });
+  
+  elements.openInWindow?.addEventListener('click', openInNewWindow);
 
   elements.gotoConfig?.addEventListener('click', openOptions);
   elements.summarizeBtn?.addEventListener('click', handleSummarize);
@@ -680,22 +774,28 @@ async function init() {
   elements.clearChatBtn?.addEventListener('click', handleClearChat);
   elements.sendBtn?.addEventListener('click', handleSendMessage);
 
-  // 字体大小调整
-  let currentFontSize = 13;
-  elements.increaseFontBtn?.addEventListener('click', () => {
+  // 字体大小调整 - 从存储中读取上次使用的字体大小
+  let currentFontSize = await loadFontSize();
+  if (elements.chatMessages) {
+    elements.chatMessages.style.fontSize = currentFontSize + 'px';
+  }
+  
+  elements.increaseFontBtn?.addEventListener('click', async () => {
     if (currentFontSize < 18) {
       currentFontSize += 1;
       if (elements.chatMessages) {
         elements.chatMessages.style.fontSize = currentFontSize + 'px';
       }
+      await saveFontSize(currentFontSize);
     }
   });
-  elements.decreaseFontBtn?.addEventListener('click', () => {
+  elements.decreaseFontBtn?.addEventListener('click', async () => {
     if (currentFontSize > 10) {
       currentFontSize -= 1;
       if (elements.chatMessages) {
         elements.chatMessages.style.fontSize = currentFontSize + 'px';
       }
+      await saveFontSize(currentFontSize);
     }
   });
 
@@ -752,7 +852,18 @@ async function init() {
 
   await renderModelSelector();
   await renderPromptSelector();
-  await getCurrentTabInfo();
+
+  // 如果是独立窗口模式，尝试恢复窗口状态
+  if (isWindowMode) {
+    const restored = await restoreWindowState();
+    if (!restored) {
+      // 如果没有恢复状态，则获取当前标签页信息
+      await getCurrentTabInfo();
+    }
+  } else {
+    await getCurrentTabInfo();
+  }
+
   await restoreState();
 
   // 如果已经选择了模型和 Prompt，自动收起配置面板
@@ -762,5 +873,65 @@ async function init() {
   }
 }
 
+// 恢复窗口状态（用于独立窗口模式）
+async function restoreWindowState() {
+  try {
+    const result = await chrome.storage.local.get('windowModeState');
+    if (!result.windowModeState) return false;
+
+    const state = result.windowModeState;
+    
+    // 检查状态是否过期（5分钟）
+    const age = Date.now() - state.timestamp;
+    if (age > 5 * 60 * 1000) {
+      await chrome.storage.local.remove('windowModeState');
+      return false;
+    }
+
+    // 恢复状态
+    if (state.chatHistory && state.chatHistory.length > 0) {
+      chatHistory = state.chatHistory;
+      currentModel = state.currentModel;
+      selectedModelId = state.selectedModelId;
+      selectedPromptId = state.selectedPromptId;
+      currentTabId = state.currentTabId;
+      currentUrl = state.currentUrl;
+      
+      // 更新 UI
+      elements.pageTitle.textContent = state.pageTitle || '未知页面';
+      if (elements.modelSelect) elements.modelSelect.value = selectedModelId || '';
+      if (elements.promptSelect) elements.promptSelect.value = selectedPromptId || '';
+      
+      // 显示对话内容
+      elements.result.classList.remove('hidden');
+      renderChatMessages();
+      
+      // 清除已恢复的状态
+      await chrome.storage.local.remove('windowModeState');
+      
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('恢复窗口状态失败:', error);
+    return false;
+  }
+}
+
+// 检测是否为独立窗口模式
+let isWindowMode = false;
+
+function checkWindowMode() {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('window') === 'true') {
+    isWindowMode = true;
+    document.body.classList.add('window-mode');
+  }
+}
+
 // DOM 加载完成后初始化
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  checkWindowMode();
+  init();
+});

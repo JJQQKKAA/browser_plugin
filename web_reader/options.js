@@ -5,6 +5,30 @@
 //   combinations: [{ id, name, modelId, promptId, isDefault }]
 // }
 
+// 默认配置
+const DEFAULT_CONFIG = {
+  models: [{
+    id: 'model_default_qwen',
+    name: 'Qwen3-Next-80B-A3B-Instruct',
+    apiUrl: '',
+    apiKey: '',
+    modelCode: 'Qwen/Qwen3-Next-80B-A3B-Instruct'
+  }],
+  prompts: [{
+    id: 'prompt_default_summary',
+    shortName: '总结',
+    systemPrompt: '你是一个专业的网页内容总结助手，擅长提取文章的核心观点和关键信息。',
+    userPrompt: '请总结以下网页内容，提取核心观点和关键信息：\n\n{{content}}\n\n请用中文输出，条理清晰。'
+  }],
+  combinations: [{
+    id: 'combo_default',
+    name: '默认组合',
+    modelId: 'model_default_qwen',
+    promptId: 'prompt_default_summary',
+    isDefault: true
+  }]
+};
+
 let configData = {
   models: [],
   prompts: [],
@@ -29,6 +53,10 @@ async function loadConfig() {
         // 迁移旧配置
         migrateOldConfig(result.webReaderConfig);
       }
+    } else {
+      // 新用户，使用默认配置
+      configData = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+      await saveConfig();
     }
 
     renderAll();
