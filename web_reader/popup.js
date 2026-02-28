@@ -10,7 +10,6 @@ const elements = {
   modelSelect: document.getElementById('modelSelect'),
   promptSelect: document.getElementById('promptSelect'),
   summarizeBtn: document.getElementById('summarizeBtn'),
-  btnText: document.getElementById('btnText'),
   result: document.getElementById('result'),
   resultContent: document.getElementById('resultContent'),
   chatMessages: document.getElementById('chatMessages'),
@@ -18,6 +17,8 @@ const elements = {
   sendBtn: document.getElementById('sendBtn'),
   clearChatBtn: document.getElementById('clearChatBtn'),
   copyBtn: document.getElementById('copyBtn'),
+  increaseFontBtn: document.getElementById('increaseFontBtn'),
+  decreaseFontBtn: document.getElementById('decreaseFontBtn'),
   loading: document.getElementById('loading'),
   loadingText: document.getElementById('loadingText'),
   error: document.getElementById('error')
@@ -535,11 +536,11 @@ function setLoading(isLoading, text = '正在处理...') {
     elements.loading.classList.remove('hidden');
     elements.loadingText.textContent = text;
     elements.summarizeBtn.disabled = true;
-    elements.btnText.textContent = '处理中...';
+    elements.summarizeBtn.classList.add('loading');
   } else {
     elements.loading.classList.add('hidden');
     elements.summarizeBtn.disabled = false;
-    elements.btnText.textContent = '总结当前页面';
+    elements.summarizeBtn.classList.remove('loading');
   }
 }
 
@@ -598,6 +599,8 @@ async function handleSummarize() {
     setLoading(false);
   }
 }
+
+
 
 // 处理发送聊天消息
 async function handleSendMessage() {
@@ -676,12 +679,38 @@ async function init() {
   elements.clearChatBtn?.addEventListener('click', handleClearChat);
   elements.sendBtn?.addEventListener('click', handleSendMessage);
 
+  // 字体大小调整
+  let currentFontSize = 13;
+  elements.increaseFontBtn?.addEventListener('click', () => {
+    if (currentFontSize < 18) {
+      currentFontSize += 1;
+      if (elements.chatMessages) {
+        elements.chatMessages.style.fontSize = currentFontSize + 'px';
+      }
+    }
+  });
+  elements.decreaseFontBtn?.addEventListener('click', () => {
+    if (currentFontSize > 10) {
+      currentFontSize -= 1;
+      if (elements.chatMessages) {
+        elements.chatMessages.style.fontSize = currentFontSize + 'px';
+      }
+    }
+  });
+
   // 聊天输入框回车发送
   elements.chatInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
+  });
+
+  // 自动调整输入框高度
+  elements.chatInput?.addEventListener('input', function() {
+    this.style.height = 'auto';
+    const newHeight = Math.min(this.scrollHeight, 120);
+    this.style.height = newHeight + 'px';
   });
 
   // 配置面板收起/展开

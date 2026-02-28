@@ -134,8 +134,8 @@ textarea {
 }
 
 .btn-small {
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
   background: #f0f0f0;
   color: #666;
 }
@@ -161,7 +161,7 @@ textarea {
 /* ===== Popup 页面样式 ===== */
 .popup-page {
   width: 380px;
-  min-height: 200px;
+  min-height: auto;
   background: #fff;
 }
 
@@ -213,7 +213,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s, transform 0.2s;
+  transition: background 0.2s, transform 0.2s, opacity 0.2s;
 }
 
 .header-actions .icon-btn:hover {
@@ -221,12 +221,26 @@ textarea {
   color: #333;
 }
 
+.header-actions .icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.header-actions .icon-btn.loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .header-actions .icon-btn.expanded #toggleConfigIcon {
   transform: rotate(180deg);
 }
 
 .page-info {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .combo-selector {
@@ -286,6 +300,7 @@ textarea {
   transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
   max-height: 200px;
   opacity: 1;
+  margin-bottom: 8px;
 }
 
 .config-panel.collapsed {
@@ -322,23 +337,31 @@ textarea {
 
 /* ===== 结果展示 ===== */
 .result-box {
-  margin-top: 10px;
+  margin-top: 8px;
   background: #f8f9fa;
   border-radius: 8px;
-  padding: 12px;
+  padding: 8px;
 }
 
 .result-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
 }
 
 .result-header h3 {
-  font-size: 14px;
+  font-size: 11px;
   color: #555;
   font-weight: 600;
+}
+
+.font-btn {
+  font-weight: 600;
+  font-size: 11px;
+  padding: 2px 6px;
+  min-width: 24px;
 }
 
 .result-content {
@@ -531,20 +554,20 @@ textarea {
 
 .result-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .chat-messages {
-  max-height: 300px;
+  max-height: 350px;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 4px 0;
 }
 
 .chat-message {
-  margin-bottom: 12px;
-  padding: 10px 12px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: inherit;
   line-height: 1.6;
 }
 
@@ -625,20 +648,25 @@ textarea {
 
 .chat-input-area {
   display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid #e0e0e0;
 }
 
 .chat-input-area textarea {
   flex: 1;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid #d0d0d0;
   border-radius: 6px;
   font-size: 13px;
   resize: none;
   font-family: inherit;
+  min-height: 32px;
+  max-height: 120px;
+  height: 32px;
+  line-height: 20px;
+  overflow-y: hidden;
 }
 
 .chat-input-area textarea:focus {
