@@ -52,6 +52,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ tab: lastActiveTab });
 
   return true;
+  }
 });
 
 
