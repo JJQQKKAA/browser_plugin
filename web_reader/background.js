@@ -27,7 +27,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // 检查状态是否过期（5分钟）
       if (result.summaryState) {
         const age = Date.now() - result.summaryState.timestamp;
-        if (age > 5 * 60 * 1000) {
+        if (age > 300000) {
           // 过期，清除状态
           chrome.storage.local.remove('summaryState');
           sendResponse({ state: null });
@@ -50,59 +50,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === 'GET_LAST_ACTIVE_TAB') {
     // 获取最后活跃的标签页
     sendResponse({ tab: lastActiveTab });
-  } else if (request.type === 'EXTRACT_CONTENT_FROM_TAB') {
-    // 从指定标签页提取内容（用于独立窗口模式）
-    extractContentFromTab(request.tabId).then(result => {
-      sendResponse(result);
-    }).catch(error => {
-      sendResponse({ error: error.message });
-    });
-    return true; // 保持消息通道开放以进行异步响应
-  }
+
   return true;
 });
 
-// 从指定标签页提取内容
-async function extractContentFromTab(tabId) {
-  try {
-    // 先尝试使用 content script 提取
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      func: () => {
-        // 简单的内容提取逻辑
-        function extractPageContent() {
-          // 移除脚本和样式元素
-          const scripts = document.querySelectorAll('script, style, nav, header, footer, aside');
-          scripts.forEach(el => el.remove());
-          
-          // 获取主要内容区域
-          const article = document.querySelector('article, main, [role="main"]');
-          if (article) {
-            return article.innerText;
-          }
-          
-          // 获取 body 文本
-          const bodyText = document.body.innerText;
-          return bodyText.substring(0, 15000);
-        }
-        
-        return {
-          title: document.title,
-          content: extractPageContent(),
-          url: window.location.href
-        };
-      }
-    });
-    
-    if (results && results[0] && results[0].result) {
-      return results[0].result;
-    }
-    
-    return { error: '无法提取页面内容' };
-  } catch (error) {
-    return { error: error.message };
-  }
-}
+
 
 // 监听标签页切换，记录最后活跃的标签页
 chrome.tabs.onActivated.addListener(async (activeInfo) => {

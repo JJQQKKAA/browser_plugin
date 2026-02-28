@@ -37,16 +37,22 @@ let chatHistory = []; // 对话历史
 let currentModel = null; // 当前使用的模型
 
 
-// 默认字体大小
-const DEFAULT_FONT_SIZE = 13;
+// 常量定义
+const CONSTANTS = {
+  DEFAULT_FONT_SIZE: 13,
+  MIN_FONT_SIZE: 10,
+  MAX_FONT_SIZE: 18,
+  STATE_EXPIRY_MS: 5 * 60 * 1000, // 5分钟
+  MAX_CONTENT_LENGTH: 15000
+};
 
 // 加载字体大小
 async function loadFontSize() {
   try {
     const result = await chrome.storage.local.get('webReaderFontSize');
-    return result.webReaderFontSize || DEFAULT_FONT_SIZE;
+    return result.webReaderFontSize || CONSTANTS.DEFAULT_FONT_SIZE;
   } catch (error) {
-    return DEFAULT_FONT_SIZE;
+    return CONSTANTS.DEFAULT_FONT_SIZE;
   }
 }
 
@@ -95,97 +101,81 @@ async function checkConfig() {
   }
 }
 
-// 渲染模型选择器
-async function renderModelSelector() {
-  const select = elements.modelSelect;
-  select.innerHTML = '<option value="">选择模型...</option>';
+// 通用选择器渲染函数
+async function renderSelector(selectElement, items, lastUsedKey, selectedRef) {
+  const placeholder = selectElement === elements.modelSelect ? '选择模型...' : '选择 Prompt...';
+  selectElement.innerHTML = `<option value="">${placeholder}</option>`;
 
-  if (!configData || !configData.models) return;
+  if (!items?.length) return;
 
-  // 获取上次使用的模型
-  const lastUsed = await chrome.storage.local.get('lastUsedModelId');
-  const lastUsedId = lastUsed.lastUsedModelId;
+  const lastUsed = await chrome.storage.local.get(lastUsedKey);
+  const lastUsedId = lastUsed[lastUsedKey];
 
-  configData.models.forEach(model => {
+  items.forEach(item => {
     const option = document.createElement('option');
-    option.value = model.id;
-    option.textContent = model.name;
+    option.value = item.id;
+    option.textContent = item.name || item.shortName;
 
-    // 默认选中上次使用的模型
-    if (model.id === lastUsedId) {
+    if (item.id === lastUsedId) {
       option.selected = true;
-      selectedModelId = model.id;
+      if (selectElement === elements.modelSelect) {
+        selectedModelId = item.id;
+      } else {
+        selectedPromptId = item.id;
+      }
     }
 
-    select.appendChild(option);
+    selectElement.appendChild(option);
   });
 
   // 如果没有选中的，选第一个
-  if (!selectedModelId && configData.models.length > 0) {
-    select.value = configData.models[0].id;
-    selectedModelId = configData.models[0].id;
+  if (!selectedRef && items.length > 0) {
+    selectElement.value = items[0].id;
+    if (selectElement === elements.modelSelect) {
+      selectedModelId = items[0].id;
+    } else {
+      selectedPromptId = items[0].id;
+    }
   }
+}
+
+// 渲染模型选择器
+async function renderModelSelector() {
+  await renderSelector(elements.modelSelect, configData?.models, 'lastUsedModelId', selectedModelId);
 }
 
 // 渲染 Prompt 选择器
 async function renderPromptSelector() {
-  const select = elements.promptSelect;
-  select.innerHTML = '<option value="">选择 Prompt...</option>';
-
-  if (!configData || !configData.prompts) return;
-
-  // 获取上次使用的 Prompt
-  const lastUsed = await chrome.storage.local.get('lastUsedPromptId');
-  const lastUsedId = lastUsed.lastUsedPromptId;
-
-  configData.prompts.forEach(prompt => {
-    const option = document.createElement('option');
-    option.value = prompt.id;
-    option.textContent = prompt.shortName;
-
-    // 默认选中上次使用的 Prompt
-    if (prompt.id === lastUsedId) {
-      option.selected = true;
-      selectedPromptId = prompt.id;
-    }
-
-    select.appendChild(option);
-  });
-
-  // 如果没有选中的，选第一个
-  if (!selectedPromptId && configData.prompts.length > 0) {
-    select.value = configData.prompts[0].id;
-    selectedPromptId = configData.prompts[0].id;
-  }
+  await renderSelector(elements.promptSelect, configData?.prompts, 'lastUsedPromptId', selectedPromptId);
 }
 
 // 注意：change 事件监听器在 init 函数中统一绑定，避免重复绑定
 
+// 获取当前标签页（统一处理窗口模式）
+async function getCurrentTab() {
+  if (isWindowMode) {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_LAST_ACTIVE_TAB' });
+    return response?.tab || null;
+  }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    chrome.runtime.sendMessage({ type: 'SET_LAST_ACTIVE_TAB', tab: { id: tab.id, url: tab.url, title: tab.title } });
+  }
+  return tab || null;
+}
+
 // 获取当前页面信息
 async function getCurrentTabInfo() {
   try {
-    // 如果是独立窗口模式，尝试从 background 获取最后活跃的标签页
-    if (isWindowMode) {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_LAST_ACTIVE_TAB' });
-      if (response && response.tab) {
-        elements.pageTitle.textContent = response.tab.title || '未知页面';
-        currentTabId = response.tab.id;
-        currentUrl = response.tab.url;
-        return response.tab;
-      }
-      elements.pageTitle.textContent = '请在浏览器中选择页面';
-      return null;
-    }
-    
-    // 正常 popup 模式
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = await getCurrentTab();
     if (tab) {
       elements.pageTitle.textContent = tab.title || '未知页面';
       currentTabId = tab.id;
       currentUrl = tab.url;
-      // 通知 background 记录最后活跃标签页
-      chrome.runtime.sendMessage({ type: 'SET_LAST_ACTIVE_TAB', tab: { id: tab.id, url: tab.url, title: tab.title } });
       return tab;
+    }
+    if (isWindowMode) {
+      elements.pageTitle.textContent = '请在浏览器中选择页面';
     }
   } catch (error) {
     console.error('获取页面信息失败:', error);
@@ -266,37 +256,24 @@ async function clearState() {
 // 提取页面内容
 async function extractPageContent() {
   try {
-    let tabId;
-    
-    // 如果是独立窗口模式，从 background 获取最后活跃的标签页
-    if (isWindowMode) {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_LAST_ACTIVE_TAB' });
-      if (!response || !response.tab) {
-        throw new Error('无法获取当前页面，请在浏览器中先打开一个页面');
-      }
-      tabId = response.tab.id;
-    } else {
-      // 正常 popup 模式
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab) throw new Error('无法获取当前页面');
-      tabId = tab.id;
+    const tab = await getCurrentTab();
+    if (!tab) {
+      throw new Error(isWindowMode ? '无法获取当前页面，请在浏览器中先打开一个页面' : '无法获取当前页面');
     }
 
     const results = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
+      target: { tabId: tab.id },
       func: () => {
         if (window.webReaderExtractContent) {
-          const result = window.webReaderExtractContent();
-          // 返回完整结果对象
-          return result;
+          return window.webReaderExtractContent();
         }
-        return { content: extractContentFallback(), metadata: {}, rawContent: extractContentFallback(), isSelection: false };
+        const fallback = extractContentFallback();
+        return { content: fallback, metadata: {}, rawContent: fallback, isSelection: false };
       }
     });
 
-    if (results && results[0] && results[0].result) {
+    if (results?.[0]?.result) {
       const result = results[0].result;
-      // 返回 content 字符串，但保留 isSelection 信息
       return {
         content: result.content || result,
         isSelection: result.isSelection || false
@@ -541,22 +518,13 @@ async function callAPIWithHistory() {
             if (delta) {
               fullContent += delta;
 
-              // 确保有一条 assistant 消息在 chatHistory 中
+              // 更新最后一条 assistant 消息
               let lastMsg = chatHistory[chatHistory.length - 1];
               if (!lastMsg || lastMsg.role !== 'assistant') {
-                // 不应该发生，因为 sendChatMessage 已经添加了 assistant 消息
-                console.warn('Unexpected: last message is not assistant', lastMsg, 'chatHistory:', JSON.parse(JSON.stringify(chatHistory)));
                 chatHistory.push({ role: 'assistant', content: '' });
                 lastMsg = chatHistory[chatHistory.length - 1];
               }
-              
-              // 调试：检查 lastMsg 是否正确
-              if (lastMsg.role !== 'assistant') {
-                console.error('CRITICAL: lastMsg is not assistant!', lastMsg);
-              }
-              
               lastMsg.content = fullContent;
-              console.log('Updated assistant message:', fullContent.substring(0, 50));
 
               // 渲染消息，保持滚动位置避免页面跳动
               const scrollMode = isChatting && chatHistory.length > 2 ? 'none' : 'bottom';
@@ -783,30 +751,25 @@ async function init() {
   elements.clearChatBtn?.addEventListener('click', handleClearChat);
   elements.sendBtn?.addEventListener('click', handleSendMessage);
 
-  // 字体大小调整 - 从存储中读取上次使用的字体大小
+  // 字体大小调整
   let currentFontSize = await loadFontSize();
   if (elements.chatMessages) {
     elements.chatMessages.style.fontSize = currentFontSize + 'px';
   }
-  
-  elements.increaseFontBtn?.addEventListener('click', async () => {
-    if (currentFontSize < 18) {
-      currentFontSize += 1;
+
+  async function adjustFontSize(delta) {
+    const newSize = currentFontSize + delta;
+    if (newSize >= 10 && newSize <= 18) {
+      currentFontSize = newSize;
       if (elements.chatMessages) {
         elements.chatMessages.style.fontSize = currentFontSize + 'px';
       }
       await saveFontSize(currentFontSize);
     }
-  });
-  elements.decreaseFontBtn?.addEventListener('click', async () => {
-    if (currentFontSize > 10) {
-      currentFontSize -= 1;
-      if (elements.chatMessages) {
-        elements.chatMessages.style.fontSize = currentFontSize + 'px';
-      }
-      await saveFontSize(currentFontSize);
-    }
-  });
+  }
+
+  elements.increaseFontBtn?.addEventListener('click', () => adjustFontSize(1));
+  elements.decreaseFontBtn?.addEventListener('click', () => adjustFontSize(-1));
 
   // 聊天输入框回车发送
   let isComposing = false;
@@ -846,30 +809,25 @@ async function init() {
     elements.toggleConfigBtn?.classList.add('expanded');
   }
 
-  // 监听配置选择变化
-  elements.modelSelect?.addEventListener('change', async (e) => {
-    selectedModelId = e.target.value;
-    if (selectedModelId) {
-      chrome.storage.local.set({ lastUsedModelId: selectedModelId });
+  // 配置选择变化处理
+  async function handleSelectionChange(type, value) {
+    if (type === 'model') {
+      selectedModelId = value;
+      if (value) chrome.storage.local.set({ lastUsedModelId: value });
+    } else {
+      selectedPromptId = value;
+      if (value) chrome.storage.local.set({ lastUsedPromptId: value });
     }
-    if (selectedModelId && selectedPromptId) {
-      elements.configPanel.classList.add('collapsed');
-      elements.toggleConfigBtn?.classList.remove('expanded');
-      await chrome.storage.local.set({ configPanelCollapsed: true });
-    }
-  });
 
-  elements.promptSelect?.addEventListener('change', async (e) => {
-    selectedPromptId = e.target.value;
-    if (selectedPromptId) {
-      chrome.storage.local.set({ lastUsedPromptId: selectedPromptId });
-    }
     if (selectedModelId && selectedPromptId) {
       elements.configPanel.classList.add('collapsed');
       elements.toggleConfigBtn?.classList.remove('expanded');
       await chrome.storage.local.set({ configPanelCollapsed: true });
     }
-  });
+  }
+
+  elements.modelSelect?.addEventListener('change', (e) => handleSelectionChange('model', e.target.value));
+  elements.promptSelect?.addEventListener('change', (e) => handleSelectionChange('prompt', e.target.value));
 
   const hasConfig = await checkConfig();
   if (!hasConfig) return;
@@ -905,9 +863,9 @@ async function restoreWindowState() {
 
     const state = result.windowModeState;
     
-    // 检查状态是否过期（5分钟）
+    // 检查状态是否过期
     const age = Date.now() - state.timestamp;
-    if (age > 5 * 60 * 1000) {
+    if (age > CONSTANTS.STATE_EXPIRY_MS) {
       await chrome.storage.local.remove('windowModeState');
       return false;
     }

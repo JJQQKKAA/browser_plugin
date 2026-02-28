@@ -284,29 +284,32 @@ function generateUniqueName(baseName, existingNames) {
   return newName;
 }
 
+// 复制配置项的通用函数
+async function copyConfigItem(type, id, items, createCopy) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+
+  const nameKey = type === 'model' ? 'name' : 'shortName';
+  const existingNames = items.map(i => i[nameKey]);
+  const newName = generateUniqueName(item[nameKey], existingNames);
+
+  const copiedItem = createCopy(item, newName);
+  items.push(copiedItem);
+
+  if (await saveConfig()) {
+    renderAll();
+  }
+}
+
 // 复制模型
 async function copyModel(id) {
-  const model = configData.models.find(m => m.id === id);
-  if (!model) return;
-
-  // 生成新的唯一名称
-  const existingNames = configData.models.map(m => m.name);
-  const newName = generateUniqueName(model.name, existingNames);
-
-  // 创建复制的模型
-  const copiedModel = {
+  await copyConfigItem('model', id, configData.models, (model, newName) => ({
     id: generateId('model'),
     name: newName,
     apiUrl: model.apiUrl,
     apiKey: model.apiKey,
     modelCode: model.modelCode
-  };
-
-  configData.models.push(copiedModel);
-
-  if (await saveConfig()) {
-    renderAll();
-  }
+  }));
 }
 
 // ===== Prompt 操作 =====
@@ -373,26 +376,12 @@ async function deletePrompt(id) {
 
 // 复制 Prompt
 async function copyPrompt(id) {
-  const prompt = configData.prompts.find(p => p.id === id);
-  if (!prompt) return;
-
-  // 生成新的唯一名称
-  const existingNames = configData.prompts.map(p => p.shortName);
-  const newName = generateUniqueName(prompt.shortName, existingNames);
-
-  // 创建复制的 Prompt
-  const copiedPrompt = {
+  await copyConfigItem('prompt', id, configData.prompts, (prompt, newName) => ({
     id: generateId('prompt'),
     shortName: newName,
     systemPrompt: prompt.systemPrompt,
     userPrompt: prompt.userPrompt
-  };
-
-  configData.prompts.push(copiedPrompt);
-
-  if (await saveConfig()) {
-    renderAll();
-  }
+  }));
 }
 
 // 关闭模态框按钮事件
