@@ -509,10 +509,11 @@ textarea {
 
 .result-content blockquote {
   border-left: 3px solid #4a90d9;
-  padding-left: 12px;
+  background: #f5f8fc;
+  padding: 10px 12px;
   margin: 10px 0;
-  color: #555;
-  font-style: italic;
+  color: #444;
+  border-radius: 0 6px 6px 0;
 }
 
 .result-content strong {
