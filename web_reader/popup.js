@@ -111,12 +111,18 @@ async function renderSelector(selectElement, items, lastUsedKey, selectedRef) {
   const lastUsed = await chrome.storage.local.get(lastUsedKey);
   const lastUsedId = lastUsed[lastUsedKey];
 
+  // 确定要选中的 ID：优先使用 lastUsedId，否则使用第一个
+  let selectedId = lastUsedId;
+  if (!selectedId || !items.find(item => item.id === selectedId)) {
+    selectedId = items[0].id;
+  }
+
   items.forEach(item => {
     const option = document.createElement('option');
     option.value = item.id;
     option.textContent = item.name || item.shortName;
 
-    if (item.id === lastUsedId) {
+    if (item.id === selectedId) {
       option.selected = true;
       if (selectElement === elements.modelSelect) {
         selectedModelId = item.id;
@@ -127,16 +133,6 @@ async function renderSelector(selectElement, items, lastUsedKey, selectedRef) {
 
     selectElement.appendChild(option);
   });
-
-  // 如果没有选中的，选第一个
-  if (!selectedRef && items.length > 0) {
-    selectElement.value = items[0].id;
-    if (selectElement === elements.modelSelect) {
-      selectedModelId = items[0].id;
-    } else {
-      selectedPromptId = items[0].id;
-    }
-  }
 }
 
 // 渲染模型选择器
