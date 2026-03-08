@@ -14,6 +14,7 @@ const elements = {
   result: document.getElementById('result'),
   resultContent: document.getElementById('resultContent'),
   chatMessages: document.getElementById('chatMessages'),
+  tokenStatsTotal: document.getElementById('tokenStatsTotal'),
   chatInput: document.getElementById('chatInput'),
   sendBtn: document.getElementById('sendBtn'),
   clearChatBtn: document.getElementById('clearChatBtn'),
@@ -35,6 +36,8 @@ let selectedModelId = null;
 let selectedPromptId = null;
 let chatHistory = []; // 对话历史
 let currentModel = null; // 当前使用的模型
+let currentTurnTokens = { input: 0, output: 0 }; // 当前轮次的 token 统计
+let totalTokens = { input: 0, output: 0 }; // 累计 token 统计
 
 
 // 常量定义
@@ -244,6 +247,9 @@ async function clearState() {
     await chrome.runtime.sendMessage({ type: 'CLEAR_SUMMARY_STATE' });
     chatHistory = [];
     currentModel = null;
+    currentTurnTokens = { input: 0, output: 0 };
+    totalTokens = { input: 0, output: 0 };
+    updateTotalTokenStats();
   } catch (error) {
     console.error('清除状态失败:', error);
   }
@@ -351,6 +357,59 @@ function renderChatMessage(message, index, isStreaming = false) {
 
   div.appendChild(header);
   div.appendChild(content);
+
+  // 为 AI 消息添加 token 统计和复制按钮（仅在非流式且有 token 数据时显示）
+  if (message.role === 'assistant' && message.tokens && !isStreaming) {
+    const tokenStatsRow = document.createElement('div');
+    tokenStatsRow.className = 'token-stats-row';
+
+    // 累计统计（最左边）
+    const totalStats = document.createElement('span');
+    totalStats.className = 'token-stats-total-inline';
+    totalStats.textContent = `Total: In ${totalTokens.input} / Out ${totalTokens.output}`;
+    tokenStatsRow.appendChild(totalStats);
+
+    // 单轮统计
+    const tokenStats = document.createElement('span');
+    tokenStats.className = 'token-stats';
+    tokenStats.textContent = `Cur: In ${message.tokens.input} / Out ${message.tokens.output}`;
+    tokenStatsRow.appendChild(tokenStats);
+
+    // 添加复制按钮（图标形式）
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-copy-btn';
+    copyBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+    `;
+    copyBtn.title = '复制';
+    copyBtn.addEventListener('click', () => {
+      copyMessageContent(message.content, copyBtn);
+    });
+    tokenStatsRow.appendChild(copyBtn);
+
+    div.appendChild(tokenStatsRow);
+  }
+
+  // 用户消息的复制按钮（放在右下角）
+  if (message.role === 'user' && !isStreaming) {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-copy-btn user-copy-btn';
+    copyBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+    `;
+    copyBtn.title = '复制';
+    copyBtn.addEventListener('click', () => {
+      copyMessageContent(message.content, copyBtn);
+    });
+    div.appendChild(copyBtn);
+  }
+
   return div;
 }
 
@@ -409,6 +468,32 @@ function updateLastAssistantMessage(content) {
   }
 }
 
+// 估算 token 数量（简单估算：中文约 1.5 字符/token，英文约 4 字符/token）
+function estimateTokens(text) {
+  if (!text) return 0;
+  // 简单估算：假设平均每个 token 约 2.5 个字符
+  return Math.ceil(text.length / 2.5);
+}
+
+// 更新总 token 统计显示
+function updateTotalTokenStats() {
+  if (elements.tokenStatsTotal) {
+    if (totalTokens.input > 0 || totalTokens.output > 0) {
+      elements.tokenStatsTotal.textContent = `Total: In ${totalTokens.input} / Out ${totalTokens.output}`;
+    } else {
+      elements.tokenStatsTotal.textContent = '';
+    }
+  }
+}
+
+// 将当前轮次 token 加到累计中
+function accumulateTokens() {
+  totalTokens.input += currentTurnTokens.input;
+  totalTokens.output += currentTurnTokens.output;
+  currentTurnTokens = { input: 0, output: 0 };
+  updateTotalTokenStats();
+}
+
 // 调用 API 进行总结（初始化对话）
 async function summarizeContent(content) {
   if (!selectedModelId) {
@@ -430,6 +515,11 @@ async function summarizeContent(content) {
 
   // 保存当前模型配置
   currentModel = model;
+
+  // 重置 token 统计
+  currentTurnTokens = { input: 0, output: 0 };
+  totalTokens = { input: 0, output: 0 };
+  updateTotalTokenStats();
 
   const finalUserPrompt = (prompt.userPrompt || '请总结以下内容：\n\n{{content}}').replace('{{content}}', content);
 
@@ -533,6 +623,12 @@ async function callAPIWithHistory() {
                 }, 500);
               }
             }
+
+            // 检查是否有 token 使用信息（某些 API 在最后一个 chunk 返回）
+            if (data.usage) {
+              currentTurnTokens.input = data.usage.prompt_tokens || 0;
+              currentTurnTokens.output = data.usage.completion_tokens || 0;
+            }
           } catch (e) {
             // 忽略解析错误
           }
@@ -541,6 +637,30 @@ async function callAPIWithHistory() {
     }
 
     isChatting = false;
+
+    // 将 token 信息添加到最后一条助手消息
+    const lastMsg = chatHistory[chatHistory.length - 1];
+    if (lastMsg && lastMsg.role === 'assistant') {
+      // 如果 API 没有返回 token 信息，尝试估算
+      if (currentTurnTokens.input === 0) {
+        currentTurnTokens.input = estimateTokens(JSON.stringify(chatHistory.slice(0, -1)));
+      }
+      if (currentTurnTokens.output === 0) {
+        currentTurnTokens.output = estimateTokens(fullContent);
+      }
+
+      // 计算当前轮次的实际输入 token（减去之前累计的输入）
+      const actualInputTokens = currentTurnTokens.input - totalTokens.input;
+      const turnTokens = {
+        input: Math.max(0, actualInputTokens),
+        output: currentTurnTokens.output
+      };
+
+      lastMsg.tokens = turnTokens;
+      accumulateTokens();
+      renderChatMessages();
+    }
+
     await saveState({ isLoading: false });
 
     return fullContent;
@@ -657,6 +777,9 @@ async function handleClearChat() {
 
   chatHistory = [];
   currentModel = null;
+  currentTurnTokens = { input: 0, output: 0 };
+  totalTokens = { input: 0, output: 0 };
+  updateTotalTokenStats();
   elements.result.classList.add('hidden');
   elements.chatMessages.innerHTML = '';
   await clearState();
@@ -685,6 +808,7 @@ async function openInNewWindow() {
       currentUrl: currentUrl,
       pageTitle: elements.pageTitle.textContent,
       isWindowMode: true,
+      totalTokens: totalTokens,
       timestamp: Date.now()
     };
     
@@ -707,9 +831,36 @@ async function openInNewWindow() {
   }
 }
 
-// 复制结果
+// 复制单条消息内容
+async function copyMessageContent(content, btnElement) {
+  if (!content) return;
+
+  try {
+    await navigator.clipboard.writeText(content);
+
+    // 显示成功反馈
+    const originalHtml = btnElement.innerHTML;
+    btnElement.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <span>已复制</span>
+    `;
+    btnElement.classList.add('copied');
+
+    setTimeout(() => {
+      btnElement.innerHTML = originalHtml;
+      btnElement.classList.remove('copied');
+    }, 1500);
+  } catch (error) {
+    console.error('复制失败:', error);
+    showError('复制失败: ' + (error.message || '请检查剪贴板权限'));
+  }
+}
+
+// 复制结果（复制全部对话）
 async function copyResult() {
-  // 复制整个对话或最后一条消息
+  // 复制整个对话
   let text = '';
   chatHistory.forEach(msg => {
     if (msg.role !== 'system') {
@@ -874,19 +1025,25 @@ async function restoreWindowState() {
       selectedPromptId = state.selectedPromptId;
       currentTabId = state.currentTabId;
       currentUrl = state.currentUrl;
-      
+
+      // 恢复 token 统计
+      if (state.totalTokens) {
+        totalTokens = state.totalTokens;
+        updateTotalTokenStats();
+      }
+
       // 更新 UI
       elements.pageTitle.textContent = state.pageTitle || '未知页面';
       if (elements.modelSelect) elements.modelSelect.value = selectedModelId || '';
       if (elements.promptSelect) elements.promptSelect.value = selectedPromptId || '';
-      
+
       // 显示对话内容
       elements.result.classList.remove('hidden');
       renderChatMessages();
-      
+
       // 清除已恢复的状态
       await chrome.storage.local.remove('windowModeState');
-      
+
       return true;
     }
     

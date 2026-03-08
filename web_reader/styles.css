@@ -850,6 +850,54 @@ textarea {
   box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.1);
 }
 
+/* Token 统计样式 */
+.token-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.token-stats {
+  font-size: 10px;
+  color: #999;
+}
+
+.token-stats-total-inline {
+  font-size: 10px;
+  color: #bbb;
+  margin-right: auto;
+}
+
+/* 消息内复制按钮 */
+.msg-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  transition: color 0.2s;
+  vertical-align: middle;
+}
+
+.msg-copy-btn:hover {
+  color: #666;
+}
+
+.msg-copy-btn.copied {
+  color: #28a745;
+}
+
+/* 用户消息的复制按钮（右下角） */
+.user-copy-btn {
+  display: flex;
+  margin-top: 4px;
+  margin-left: auto;
+}
+
 .btn-small {
   padding: 6px 12px;
   font-size: 12px;
