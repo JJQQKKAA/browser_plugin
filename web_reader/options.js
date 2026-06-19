@@ -40,6 +40,17 @@ function generateId(prefix) {
   return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
+// 判断当前配置是否只是默认配置（新用户未自定义过）
+function hasUserCustomizedConfig() {
+  const defaultModelIds = new Set(DEFAULT_CONFIG.models.map(m => m.id));
+  const defaultPromptIds = new Set(DEFAULT_CONFIG.prompts.map(p => p.id));
+
+  const hasExtraModels = configData.models.some(m => !defaultModelIds.has(m.id));
+  const hasExtraPrompts = configData.prompts.some(p => !defaultPromptIds.has(p.id));
+
+  return hasExtraModels || hasExtraPrompts;
+}
+
 // 加载配置
 async function loadConfig() {
   try {
@@ -564,9 +575,9 @@ document.getElementById('importFileInput')?.addEventListener('change', async (e)
       }
     }
 
-    // 确认是否覆盖
-    if (configData.models.length > 0 || configData.prompts.length > 0) {
-      if (!confirm(`导入将覆盖现有配置：\n- ${importedData.models.length} 个模型\n- ${importedData.prompts.length} 个 Prompt\n- ${importedData.combinations.length} 个组合\n\n是否继续？`)) {
+    // 确认是否覆盖（仅当用户已有自定义配置时才询问）
+    if (hasUserCustomizedConfig()) {
+      if (!confirm(`导入将覆盖现有配置：\n- ${importedData.models.length} 个模型\n- ${importedData.prompts.length} 个 Prompt\n- ${(importedData.combinations || []).length} 个组合\n\n是否继续？`)) {
         e.target.value = '';
         return;
       }
@@ -685,8 +696,8 @@ document.getElementById('confirmJsonImportBtn')?.addEventListener('click', async
     // 验证格式
     validateConfig(importedData);
 
-    // 确认是否覆盖
-    if (configData.models.length > 0 || configData.prompts.length > 0) {
+    // 确认是否覆盖（仅当用户已有自定义配置时才询问）
+    if (hasUserCustomizedConfig()) {
       if (!confirm(`导入将覆盖现有配置：\n- ${importedData.models.length} 个模型\n- ${importedData.prompts.length} 个 Prompt\n\n是否继续？`)) {
         return;
       }

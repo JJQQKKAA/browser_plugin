@@ -193,20 +193,6 @@ textarea {
   min-height: 100vh;
 }
 
-/* PC 端使用更宽的宽度 */
-@media screen and (min-width: 768px) {
-  .popup-page {
-    width: 520px;
-  }
-}
-
-/* 大屏幕 PC 端可以使用更宽 */
-@media screen and (min-width: 1200px) {
-  .popup-page {
-    width: 640px;
-  }
-}
-
 .popup-container {
   padding: 12px;
   display: flex;

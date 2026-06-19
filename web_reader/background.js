@@ -13,7 +13,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         tabId: request.tabId,
         url: request.url,
         title: request.title,
-        comboId: request.comboId,
+        modelId: request.modelId,
+        promptId: request.promptId,
         chatHistory: request.chatHistory,
         isLoading: request.isLoading,
         error: request.error,
@@ -50,8 +51,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === 'GET_LAST_ACTIVE_TAB') {
     // 获取最后活跃的标签页
     sendResponse({ tab: lastActiveTab });
-
-  return true;
   }
 });
 

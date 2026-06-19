@@ -209,6 +209,8 @@ async function restoreState() {
       if (response.state.modelId) {
         elements.modelSelect.value = response.state.modelId;
         selectedModelId = response.state.modelId;
+        // 恢复当前模型对象，确保恢复状态后能继续对话
+        currentModel = configData?.models?.find(m => m.id === selectedModelId) || null;
       }
       // 恢复 Prompt 选择
       if (response.state.promptId) {
@@ -222,9 +224,11 @@ async function restoreState() {
         renderChatMessages();
         elements.result.classList.remove('hidden');
       } else if (response.state.content) {
-        // 兼容旧格式
+        // 兼容旧格式：直接渲染为单条结果
         elements.result.classList.remove('hidden');
-        renderMarkdown(response.state.content);
+        elements.chatMessages.classList.add('hidden');
+        elements.resultContent.classList.remove('hidden');
+        elements.resultContent.innerHTML = renderMarkdown(response.state.content);
       }
 
       if (response.state.isLoading) {
@@ -266,11 +270,36 @@ async function extractPageContent() {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
-        if (window.webReaderExtractContent) {
+        if (typeof window.webReaderExtractContent === 'function') {
           return window.webReaderExtractContent();
         }
-        const fallback = extractContentFallback();
-        return { content: fallback, metadata: {}, rawContent: fallback, isSelection: false };
+
+        // 页面未注入 content.js 时的安全 fallback
+        const selectors = [
+          'article', 'main', '[role="main"]',
+          '.post-content', '.entry-content', '.article-content',
+          '.content', '#content', '.post', '.article'
+        ];
+        let bestElement = null;
+        let maxTextLength = 0;
+        for (const selector of selectors) {
+          const element = document.querySelector(selector);
+          if (element) {
+            const text = element.innerText || '';
+            if (text.length > maxTextLength) {
+              maxTextLength = text.length;
+              bestElement = element;
+            }
+          }
+        }
+        if (!bestElement) {
+          bestElement = document.body;
+        }
+        let content = (bestElement.innerText || '').replace(/\s+/g, ' ').trim();
+        if (content.length > 15000) {
+          content = content.substring(0, 15000) + '...';
+        }
+        return { content, metadata: {}, rawContent: content, isSelection: false };
       }
     });
 
@@ -289,40 +318,15 @@ async function extractPageContent() {
   }
 }
 
-// 备用内容提取
-function extractContentFallback() {
-  const selectors = [
-    'article', 'main', '[role="main"]',
-    '.post-content', '.entry-content', '.article-content',
-    '.content', '#content', '.post', '.article'
-  ];
-
-  let bestElement = null;
-  let maxTextLength = 0;
-
-  for (const selector of selectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      const text = element.innerText || '';
-      if (text.length > maxTextLength) {
-        maxTextLength = text.length;
-        bestElement = element;
-      }
-    }
-  }
-
-  if (!bestElement) {
-    bestElement = document.body;
-  }
-
-  let content = bestElement.innerText || '';
-  content = content.replace(/\s+/g, ' ').trim();
-
-  if (content.length > 15000) {
-    content = content.substring(0, 15000) + '...';
-  }
-
-  return content;
+// 转义 HTML 特殊字符（用于 Markdown 不可用时的降级渲染）
+function escapeHtml(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 // 渲染 Markdown
@@ -558,9 +562,10 @@ async function callAPIWithHistory() {
   abortController = new AbortController();
 
   try {
+    const requestMessages = chatHistory.map(msg => ({ role: msg.role, content: msg.content }));
     const requestBody = {
       model: currentModel.modelCode,
-      messages: chatHistory.map(msg => ({ role: msg.role, content: msg.content })),
+      messages: requestMessages,
       stream: true,
       temperature: 0.7
     };
@@ -642,18 +647,17 @@ async function callAPIWithHistory() {
     const lastMsg = chatHistory[chatHistory.length - 1];
     if (lastMsg && lastMsg.role === 'assistant') {
       // 如果 API 没有返回 token 信息，尝试估算
+      // requestMessages 就是当前轮次实际发送的完整上下文，可直接作为本轮输入估算
       if (currentTurnTokens.input === 0) {
-        currentTurnTokens.input = estimateTokens(JSON.stringify(chatHistory.slice(0, -1)));
+        currentTurnTokens.input = estimateTokens(JSON.stringify(requestMessages));
       }
       if (currentTurnTokens.output === 0) {
         currentTurnTokens.output = estimateTokens(fullContent);
       }
 
-      // 计算当前轮次的实际输入 token（减去之前累计的输入）
-      const actualInputTokens = currentTurnTokens.input - totalTokens.input;
       const turnTokens = {
-        input: Math.max(0, actualInputTokens),
-        output: currentTurnTokens.output
+        input: Math.max(0, currentTurnTokens.input),
+        output: Math.max(0, currentTurnTokens.output)
       };
 
       lastMsg.tokens = turnTokens;

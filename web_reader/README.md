@@ -1,5 +1,7 @@
 # Web Reader - AI 网页总结插件
 
+[![版本](https://img.shields.io/badge/version-1.2.0-blue.svg)](#更新日志)
+
 使用自定义 AI 模型总结网页内容，支持多模型配置和多轮对话。
 
 ## 功能特点
@@ -58,14 +60,18 @@
 
 ```
 web_reader/
-├── manifest.json      # 插件配置
-├── background.js      # Service Worker
+├── manifest.json      # 插件配置（Manifest V3）
+├── background.js      # Service Worker，负责状态保持
 ├── popup.html/js      # 弹窗界面和逻辑
 ├── options.html/js    # 配置页面
 ├── content.js         # 内容提取脚本
 ├── marked.min.js      # Markdown 渲染库
 ├── styles.css         # 样式文件
-└── icon*.png          # 图标文件
+├── icon*.png          # 图标文件
+├── project_context.md # 项目上下文说明（面向 AI/新贡献者）
+├── CHANGELOG.md       # 更新日志
+├── PRIVACY.md         # 隐私政策
+└── README.md          # 本文件
 ```
 
 ## 更新日志
