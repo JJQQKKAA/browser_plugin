@@ -74,8 +74,7 @@ Web Reader 是一款浏览器扩展，帮助用户使用自定义 AI 模型总�
 
 ## 联系我们
 
-如有隐私相关问题，请通过以下方式联系我们：
-- GitHub Issues: https://github.com/your-username/web-reader/issues
+如有隐私相关问题，请通过issue联系我们：
 
 ## 权限撤销
 
