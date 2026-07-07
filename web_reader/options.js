@@ -1,6 +1,6 @@
 // 新的配置结构
 // {
-//   models: [{ id, name, apiUrl, apiKey, modelCode }],
+//   models: [{ id, name, apiUrl, apiKey, modelCode, temperature }],
 //   prompts: [{ id, shortName, systemPrompt, userPrompt }],
 //   combinations: [{ id, name, modelId, promptId, isDefault }]
 // }
@@ -12,7 +12,8 @@ const DEFAULT_CONFIG = {
     name: 'Qwen3-Next-80B-A3B-Instruct',
     apiUrl: '',
     apiKey: '',
-    modelCode: 'Qwen/Qwen3-Next-80B-A3B-Instruct'
+    modelCode: 'Qwen/Qwen3-Next-80B-A3B-Instruct',
+    temperature: 0.3
   }],
   prompts: [{
     id: 'prompt_default_summary',
@@ -88,7 +89,8 @@ function migrateOldConfig(oldConfig) {
     name: oldConfig.modelName || '默认模型',
     apiUrl: oldConfig.apiUrl || '',
     apiKey: oldConfig.apiKey || '',
-    modelCode: oldConfig.modelName || 'gpt-4o-mini'
+    modelCode: oldConfig.modelName || 'gpt-4o-mini',
+    temperature: 0.3
   }];
 
   configData.prompts = [{
@@ -151,6 +153,7 @@ function renderModels() {
           </div>
         </div>
         <div class="hint">模型代码: ${escapeHtml(model.modelCode)}</div>
+        <div class="hint">Temperature: ${escapeHtml(String(model.temperature ?? 0.3))}</div>
         <div class="hint">API: ${escapeHtml(model.apiUrl)}</div>
       </div>
     `;
@@ -220,6 +223,7 @@ function closeModal(modalId) {
 
 document.getElementById('addModelBtn').addEventListener('click', () => {
   document.getElementById('modelId').value = '';
+  document.getElementById('modelTemperature').value = '0.3';
   document.getElementById('modelModalTitle').textContent = '添加模型';
   openModal('modelModal');
 });
@@ -230,13 +234,20 @@ document.getElementById('saveModelBtn').addEventListener('click', async () => {
   const apiUrl = document.getElementById('apiUrl').value.trim();
   const apiKey = document.getElementById('apiKey').value.trim();
   const modelCode = document.getElementById('modelCode').value.trim();
+  const temperatureInput = document.getElementById('modelTemperature').value.trim();
+  const temperature = temperatureInput === '' ? 0.3 : parseFloat(temperatureInput);
+
+  if (isNaN(temperature) || temperature < 0 || temperature > 2) {
+    alert('Temperature 必须是 0~2 之间的数字');
+    return;
+  }
 
   if (!name || !apiUrl || !apiKey || !modelCode) {
     alert('请填写所有必填项');
     return;
   }
 
-  const modelData = { id: id || generateId('model'), name, apiUrl, apiKey, modelCode };
+  const modelData = { id: id || generateId('model'), name, apiUrl, apiKey, modelCode, temperature };
 
   if (id) {
     const index = configData.models.findIndex(m => m.id === id);
@@ -260,6 +271,7 @@ function editModel(id) {
   document.getElementById('apiUrl').value = model.apiUrl;
   document.getElementById('apiKey').value = model.apiKey;
   document.getElementById('modelCode').value = model.modelCode;
+  document.getElementById('modelTemperature').value = model.temperature ?? 0.3;
   document.getElementById('modelModalTitle').textContent = '编辑模型';
   openModal('modelModal');
 }
@@ -319,7 +331,8 @@ async function copyModel(id) {
     name: newName,
     apiUrl: model.apiUrl,
     apiKey: model.apiKey,
-    modelCode: model.modelCode
+    modelCode: model.modelCode,
+    temperature: model.temperature ?? 0.3
   }));
 }
 
@@ -566,6 +579,9 @@ document.getElementById('importFileInput')?.addEventListener('change', async (e)
       if (!model.id || !model.name || !model.apiUrl || !model.apiKey || !model.modelCode) {
         throw new Error(`模型 "${model.name || '未命名'}" 缺少必需字段`);
       }
+      if (model.temperature !== undefined && (typeof model.temperature !== 'number' || model.temperature < 0 || model.temperature > 2)) {
+        throw new Error(`模型 "${model.name || '未命名'}" 的 temperature 必须是 0~2 之间的数字`);
+      }
     }
 
     // 验证每个 prompt 的必需字段
@@ -643,6 +659,9 @@ function validateConfig(data) {
       if (!model.apiUrl) errors.push(`models[${index}]: 缺少 apiUrl`);
       if (!model.apiKey) errors.push(`models[${index}]: 缺少 apiKey`);
       if (!model.modelCode) errors.push(`models[${index}]: 缺少 modelCode`);
+      if (model.temperature !== undefined && (typeof model.temperature !== 'number' || model.temperature < 0 || model.temperature > 2)) {
+        errors.push(`models[${index}]: temperature 必须是 0~2 之间的数字`);
+      }
     });
   }
 

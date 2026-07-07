@@ -25,7 +25,7 @@
 ## 配置 API
 
 1. 右键点击扩展图标，选择「选项」
-2. **模型配置**: 添加模型（名称、API URL、API Key、模型代码）
+2. **模型配置**: 添加模型（名称、API URL、API Key、模型代码、Temperature）
 3. **Prompt 配置**: 添加 Prompt（简称、System Prompt、User Prompt）
    - User Prompt 中使用 `{{content}}` 作为网页内容占位符
 

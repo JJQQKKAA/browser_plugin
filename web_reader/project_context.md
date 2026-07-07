@@ -145,7 +145,8 @@ popup.js 定时调用 background.js SAVE_SUMMARY_STATE 保持状态
       "name": "显示名称",
       "apiUrl": "https://api.openai.com/v1/chat/completions",
       "apiKey": "sk-xxx",
-      "modelCode": "gpt-4o-mini"
+      "modelCode": "gpt-4o-mini",
+      "temperature": 0.3
     }
   ],
   "prompts": [
@@ -220,6 +221,10 @@ popup.js 定时调用 background.js SAVE_SUMMARY_STATE 保持状态
 | `styles.css` 中重复媒体查询 | 删除重复的 `@media` 块 |
 | manifest 版本号与 CHANGELOG 不一致 | 统一为 `1.2.0` |
 
+## 后续小迭代
+
+- **Temperature 可配置**：已在 `options.js` / `popup.js` 中实现，每个模型可独立设置 temperature，默认 `0.3`，范围 `0~2`。
+
 ---
 
 ## 8. 已知限制与注意事项
@@ -236,7 +241,7 @@ popup.js 定时调用 background.js SAVE_SUMMARY_STATE 保持状态
 ## 9. 常见迭代方向
 
 ### 9.1 短期可做
-- 模型参数可配置（temperature、max_tokens、top_p）
+- ~~模型参数可配置（temperature、max_tokens、top_p）~~ → temperature 已支持，每个模型独立配置
 - 自定义请求头（适配 Azure OpenAI、Anthropic 等）
 - 更精确的 token 估算库
 - 快捷键触发总结

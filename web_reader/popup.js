@@ -567,7 +567,7 @@ async function callAPIWithHistory() {
       model: currentModel.modelCode,
       messages: requestMessages,
       stream: true,
-      temperature: 0.7
+      temperature: currentModel.temperature ?? 0.3
     };
 
     const response = await fetch(currentModel.apiUrl, {
