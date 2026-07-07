@@ -329,6 +329,53 @@ function escapeHtml(text) {
     .replace(/'/g, '&#039;');
 }
 
+// 预处理 Markdown：修复列表项（尤其是带子列表的项）后跟引用块导致列表断开的问题
+function preprocessMarkdown(text) {
+  if (!text) return text;
+
+  const lines = text.split('\n');
+  const result = [];
+  let lastListItemIndent = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // 记录最近遇到的列表项缩进
+    const listMatch = line.match(/^(\s*)(?:[-*] |\d+\. )/);
+    if (listMatch) {
+      lastListItemIndent = listMatch[1].length;
+      result.push(line);
+      continue;
+    }
+
+    // 空行保留，不重置列表上下文（列表可能继续）
+    if (trimmed === '') {
+      result.push(line);
+      continue;
+    }
+
+    // 引用块如果在列表上下文中且缩进不足，补齐缩进，避免被解析为独立块而截断列表
+    const bqMatch = line.match(/^(\s*)>/);
+    if (bqMatch && lastListItemIndent >= 0) {
+      const bqIndent = bqMatch[1].length;
+      if (bqIndent === 0) {
+        result.push(' '.repeat(lastListItemIndent + 1) + line.trim());
+        continue;
+      }
+    }
+
+    // 顶格的非列表、非引用、非空行会结束列表上下文
+    if (!line.match(/^\s/)) {
+      lastListItemIndent = -1;
+    }
+
+    result.push(line);
+  }
+
+  return result.join('\n');
+}
+
 // 渲染 Markdown
 function renderMarkdown(text) {
   if (typeof marked !== 'undefined') {
@@ -338,7 +385,7 @@ function renderMarkdown(text) {
       headerIds: false,
       mangle: false
     });
-    return marked.parse(text);
+    return marked.parse(preprocessMarkdown(text));
   }
   return escapeHtml(text).replace(/\n/g, '<br>');
 }
