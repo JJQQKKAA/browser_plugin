@@ -23,6 +23,13 @@ const elements = {
   decreaseFontBtn: document.getElementById('decreaseFontBtn'),
   headerLoading: document.getElementById('headerLoading'),
   loadingText: document.getElementById('loadingText'),
+  taskButtons: document.getElementById('taskButtons'),
+  configSummary: document.getElementById('configSummary'),
+  emptyState: document.getElementById('emptyState'),
+  stopBtn: document.getElementById('stopBtn'),
+  retryBtn: document.getElementById('retryBtn'),
+  generationStatus: document.getElementById('generationStatus'),
+  latestBtn: document.getElementById('latestBtn'),
   error: document.getElementById('error')
 };
 
@@ -30,19 +37,21 @@ let configData = null;
 let currentTabId = null;
 let currentUrl = null;
 let isSummarizing = false;
+let lastRequest = null;
+let hasEnteredReadingMode = false;
+let generationStatus = '准备就绪';
 let isChatting = false;
 let abortController = null;
 let selectedModelId = null;
 let selectedPromptId = null;
 let chatHistory = []; // 对话历史
 let currentModel = null; // 当前使用的模型
-let currentTurnTokens = { input: 0, output: 0 }; // 当前轮次的 token 统计
 let totalTokens = { input: 0, output: 0 }; // 累计 token 统计
 
 
 // 常量定义
 const CONSTANTS = {
-  DEFAULT_FONT_SIZE: 13,
+  DEFAULT_FONT_SIZE: 15,
   MIN_FONT_SIZE: 10,
   MAX_FONT_SIZE: 18,
   STATE_EXPIRY_MS: 5 * 60 * 1000, // 5分钟
@@ -79,20 +88,14 @@ async function checkConfig() {
       return false;
     }
 
-    // 检查是否是新格式
-    if (result.webReaderConfig.combinations && Array.isArray(result.webReaderConfig.combinations)) {
-      configData = result.webReaderConfig;
-
-      if (configData.combinations.length === 0) {
-        elements.noConfig.classList.remove('hidden');
-        elements.mainContent.classList.add('hidden');
-        return false;
-      }
-    } else {
-      // 旧格式 - 显示配置提示
+    configData = result.webReaderConfig;
+    if (!Array.isArray(configData.models) || !Array.isArray(configData.prompts)) {
       elements.noConfig.classList.remove('hidden');
       elements.mainContent.classList.add('hidden');
       return false;
+    }
+    if (ReaderCore.prepareConfig(configData)) {
+      await chrome.storage.local.set({ webReaderConfig: configData });
     }
 
     elements.noConfig.classList.add('hidden');
@@ -106,7 +109,7 @@ async function checkConfig() {
 
 // 通用选择器渲染函数
 async function renderSelector(selectElement, items, lastUsedKey, selectedRef) {
-  const placeholder = selectElement === elements.modelSelect ? '选择模型...' : '选择 Prompt...';
+  const placeholder = selectElement === elements.modelSelect ? '选择模型...' : '选择任务...';
   selectElement.innerHTML = `<option value="">${placeholder}</option>`;
 
   if (!items?.length) return;
@@ -169,6 +172,7 @@ async function getCurrentTabInfo() {
     const tab = await getCurrentTab();
     if (tab) {
       elements.pageTitle.textContent = tab.title || '未知页面';
+      document.getElementById('pageSource').textContent = tab.url ? new URL(tab.url).hostname : '';
       currentTabId = tab.id;
       currentUrl = tab.url;
       return tab;
@@ -193,6 +197,9 @@ async function saveState(state) {
       modelId: selectedModelId,
       promptId: selectedPromptId,
       chatHistory: chatHistory,
+      lastRequest,
+      generationStatus,
+      totalTokens,
       ...state
     });
   } catch (error) {
@@ -206,18 +213,22 @@ async function restoreState() {
     const response = await chrome.runtime.sendMessage({ type: 'GET_SUMMARY_STATE' });
     if (response.state && response.state.tabId === currentTabId && response.state.url === currentUrl) {
       // 恢复模型选择
-      if (response.state.modelId) {
+      if (configData.models.some(model => model.id === response.state.modelId)) {
         elements.modelSelect.value = response.state.modelId;
         selectedModelId = response.state.modelId;
         // 恢复当前模型对象，确保恢复状态后能继续对话
         currentModel = configData?.models?.find(m => m.id === selectedModelId) || null;
       }
       // 恢复 Prompt 选择
-      if (response.state.promptId) {
+      if (configData.prompts.some(prompt => prompt.id === response.state.promptId)) {
         elements.promptSelect.value = response.state.promptId;
         selectedPromptId = response.state.promptId;
       }
 
+      currentModel = configData.models.find(model => model.id === selectedModelId) || null;
+      lastRequest = response.state.lastRequest || null;
+      generationStatus = response.state.isLoading ? '上次生成已中断，可重新生成' : (response.state.generationStatus || '已恢复阅读笔记');
+      totalTokens = response.state.totalTokens || { input: 0, output: 0 };
       // 恢复对话历史
       if (response.state.chatHistory && response.state.chatHistory.length > 0) {
         chatHistory = response.state.chatHistory;
@@ -250,8 +261,8 @@ async function clearState() {
   try {
     await chrome.runtime.sendMessage({ type: 'CLEAR_SUMMARY_STATE' });
     chatHistory = [];
+    lastRequest = null;
     currentModel = null;
-    currentTurnTokens = { input: 0, output: 0 };
     totalTokens = { input: 0, output: 0 };
     updateTotalTokenStats();
   } catch (error) {
@@ -329,63 +340,10 @@ function escapeHtml(text) {
     .replace(/'/g, '&#039;');
 }
 
-// 预处理 Markdown：修复列表项（尤其是带子列表的项）后跟引用块导致列表断开的问题
-function preprocessMarkdown(text) {
-  if (!text) return text;
-
-  const lines = text.split('\n');
-  const result = [];
-  let lastListItemIndent = -1;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // 记录最近遇到的列表项缩进
-    const listMatch = line.match(/^(\s*)(?:[-*] |\d+\. )/);
-    if (listMatch) {
-      lastListItemIndent = listMatch[1].length;
-      result.push(line);
-      continue;
-    }
-
-    // 空行保留，不重置列表上下文（列表可能继续）
-    if (trimmed === '') {
-      result.push(line);
-      continue;
-    }
-
-    // 引用块如果在列表上下文中且缩进不足，补齐缩进，避免被解析为独立块而截断列表
-    const bqMatch = line.match(/^(\s*)>/);
-    if (bqMatch && lastListItemIndent >= 0) {
-      const bqIndent = bqMatch[1].length;
-      if (bqIndent === 0) {
-        result.push(' '.repeat(lastListItemIndent + 1) + line.trim());
-        continue;
-      }
-    }
-
-    // 顶格的非列表、非引用、非空行会结束列表上下文
-    if (!line.match(/^\s/)) {
-      lastListItemIndent = -1;
-    }
-
-    result.push(line);
-  }
-
-  return result.join('\n');
-}
-
-// 渲染 Markdown
+// 直接遵循 Markdown 结构，避免补缩进把顶格段落或引用错误吸入列表
 function renderMarkdown(text) {
   if (typeof marked !== 'undefined') {
-    marked.setOptions({
-      breaks: false,  // 关闭自动换行，避免破坏列表解析
-      gfm: true,
-      headerIds: false,
-      mangle: false
-    });
-    return marked.parse(preprocessMarkdown(text));
+    return marked.parse(text, { breaks: false, gfm: true });
   }
   return escapeHtml(text).replace(/\n/g, '<br>');
 }
@@ -400,7 +358,7 @@ function renderChatMessage(message, index, isStreaming = false) {
 
   const header = document.createElement('div');
   header.className = 'chat-message-header';
-  header.textContent = message.role === 'user' ? '你' : 'AI';
+  header.textContent = message.role === 'user' ? '你的提问' : '阅读助手';
 
   const content = document.createElement('div');
   content.className = 'chat-message-content';
@@ -417,13 +375,17 @@ function renderChatMessage(message, index, isStreaming = false) {
     // 累计统计（最左边）
     const totalStats = document.createElement('span');
     totalStats.className = 'token-stats-total-inline';
-    totalStats.textContent = `Total: In ${totalTokens.input} / Out ${totalTokens.output}`;
+    const cumulative = ReaderCore.formatUsage(totalTokens);
+    totalStats.textContent = `累计 ${cumulative.total}`;
+    totalStats.title = `本次会话所有请求累计（含重试及收到响应的中断请求）\n${cumulative.title}`;
     tokenStatsRow.appendChild(totalStats);
 
     // 单轮统计
     const tokenStats = document.createElement('span');
     tokenStats.className = 'token-stats';
-    tokenStats.textContent = `Cur: In ${message.tokens.input} / Out ${message.tokens.output}`;
+    const display = ReaderCore.formatUsage(message.tokens);
+    tokenStats.textContent = display.text;
+    tokenStats.title = display.title;
     tokenStatsRow.appendChild(tokenStats);
 
     // 添加复制按钮（图标形式）
@@ -466,7 +428,7 @@ function renderChatMessage(message, index, isStreaming = false) {
 
 // 渲染所有聊天消息
 // 永远隐藏 system 和第一个 user 消息（它们是初始总结的上下文，不显示给用户）
-function renderChatMessages(scrollMode = 'bottom') {
+function renderChatMessages(scrollMode = 'auto') {
   if (!elements.chatMessages) return;
 
   // 保存当前滚动位置和滚动高度（用于保持相对位置）
@@ -482,7 +444,7 @@ function renderChatMessages(scrollMode = 'bottom') {
     if (msg.role === 'system' || index === 1) {
       return;
     }
-    elements.chatMessages.appendChild(renderChatMessage(msg, index));
+    elements.chatMessages.appendChild(renderChatMessage(msg, index, Boolean(abortController) && index === chatHistory.length - 1));
   });
 
   // 处理滚动
@@ -519,30 +481,15 @@ function updateLastAssistantMessage(content) {
   }
 }
 
-// 估算 token 数量（简单估算：中文约 1.5 字符/token，英文约 4 字符/token）
-function estimateTokens(text) {
-  if (!text) return 0;
-  // 简单估算：假设平均每个 token 约 2.5 个字符
-  return Math.ceil(text.length / 2.5);
-}
-
 // 更新总 token 统计显示
 function updateTotalTokenStats() {
   if (elements.tokenStatsTotal) {
     if (totalTokens.input > 0 || totalTokens.output > 0) {
-      elements.tokenStatsTotal.textContent = `Total: In ${totalTokens.input} / Out ${totalTokens.output}`;
+      elements.tokenStatsTotal.textContent = ReaderCore.formatUsage(totalTokens).text;
     } else {
       elements.tokenStatsTotal.textContent = '';
     }
   }
-}
-
-// 将当前轮次 token 加到累计中
-function accumulateTokens() {
-  totalTokens.input += currentTurnTokens.input;
-  totalTokens.output += currentTurnTokens.output;
-  currentTurnTokens = { input: 0, output: 0 };
-  updateTotalTokenStats();
 }
 
 // 调用 API 进行总结（初始化对话）
@@ -551,7 +498,7 @@ async function summarizeContent(content) {
     throw new Error('请先选择一个模型');
   }
   if (!selectedPromptId) {
-    throw new Error('请先选择一个 Prompt');
+    throw new Error('请先选择一个任务');
   }
 
   const model = configData.models.find(m => m.id === selectedModelId);
@@ -561,14 +508,13 @@ async function summarizeContent(content) {
     throw new Error('选中的模型不存在');
   }
   if (!prompt) {
-    throw new Error('选中的 Prompt 不存在');
+    throw new Error('选中的任务不存在');
   }
 
   // 保存当前模型配置
   currentModel = model;
 
   // 重置 token 统计
-  currentTurnTokens = { input: 0, output: 0 };
   totalTokens = { input: 0, output: 0 };
   updateTotalTokenStats();
 
@@ -598,146 +544,153 @@ async function sendChatMessage(userMessage) {
   chatHistory.push({ role: 'user', content: userMessage });
   renderChatMessages('preserve'); // 保持相对位置，让新消息显示在视野内
 
-  // 添加空的助手消息占位
-  chatHistory.push({ role: 'assistant', content: '' });
 
   return await callAPIWithHistory();
 }
 
 // 调用 API（使用对话历史）
-async function callAPIWithHistory() {
+async function callAPIWithHistory(messages = null) {
   abortController = new AbortController();
+  elements.stopBtn.disabled = false;
+  const requestMessages = messages || chatHistory.map(msg => ({ role: msg.role, content: msg.content }));
+  // 保存本轮输入快照，重试时替换本轮回答，不把半截回答再次发给模型
+  const requestHistory = chatHistory.map(message => ({ ...message }));
+  if (requestHistory[requestHistory.length - 1]?.role === 'assistant') requestHistory.pop();
+  lastRequest = { messages: requestMessages, history: requestHistory, modelId: currentModel.id };
+  if (chatHistory[chatHistory.length - 1]?.role === 'assistant') chatHistory.pop();
+  chatHistory.push({ role: 'assistant', content: '' });
+  const assistant = chatHistory[chatHistory.length - 1];
+  let usage = {};
+  let reasoningText = '';
+  let receivedResponse = false;
+  let completed = false;
+  renderChatMessages('bottom');
+  await saveState({ isLoading: true });
 
   try {
-    const requestMessages = chatHistory.map(msg => ({ role: msg.role, content: msg.content }));
-    const requestBody = {
-      model: currentModel.modelCode,
-      messages: requestMessages,
-      stream: true,
-      temperature: currentModel.temperature ?? 0.3
-    };
-
     const response = await fetch(currentModel.apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentModel.apiKey}`
-      },
-      body: JSON.stringify(requestBody),
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentModel.apiKey}` },
+      body: JSON.stringify(ReaderCore.buildRequest(currentModel, requestMessages)),
       signal: abortController.signal
     });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`API 请求失败: ${response.status} - ${errorData}`);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullContent = '';
-
+    if (!response.ok) throw new Error(`请求失败 (${response.status})：${await response.text()}`);
+    if (!response.body) throw new Error('API 没有返回可读取的响应');
+    receivedResponse = true;
     isChatting = true;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (!trimmedLine || trimmedLine === 'data: [DONE]') continue;
-
-        if (trimmedLine.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(trimmedLine.slice(6));
-            const delta = data.choices?.[0]?.delta?.content;
-            if (delta) {
-              fullContent += delta;
-
-              // 更新最后一条 assistant 消息
-              let lastMsg = chatHistory[chatHistory.length - 1];
-              if (!lastMsg || lastMsg.role !== 'assistant') {
-                chatHistory.push({ role: 'assistant', content: '' });
-                lastMsg = chatHistory[chatHistory.length - 1];
-              }
-              lastMsg.content = fullContent;
-
-              // 渲染消息，保持滚动位置避免页面跳动
-              const scrollMode = isChatting && chatHistory.length > 2 ? 'none' : 'bottom';
-              renderChatMessages(scrollMode);
-
-              if (!window.saveStateTimeout) {
-                window.saveStateTimeout = setTimeout(() => {
-                  saveState({ isLoading: true });
-                  window.saveStateTimeout = null;
-                }, 500);
-              }
-            }
-
-            // 检查是否有 token 使用信息（某些 API 在最后一个 chunk 返回）
-            if (data.usage) {
-              currentTurnTokens.input = data.usage.prompt_tokens || 0;
-              currentTurnTokens.output = data.usage.completion_tokens || 0;
-            }
-          } catch (e) {
-            // 忽略解析错误
-          }
+    await ReaderCore.readSSE(response.body, data => {
+      if (data.error) throw new Error(data.error.message || 'API 返回错误');
+      usage = ReaderCore.mergeUsage(usage, data.usage);
+      const reasoning = data.choices?.[0]?.delta?.reasoning_content;
+      if (typeof reasoning === 'string') reasoningText += reasoning;
+      const delta = data.choices?.[0]?.delta?.content;
+      if (delta) {
+        assistant.content += delta;
+        renderChatMessages();
+        if (!window.saveStateTimeout) {
+          window.saveStateTimeout = setTimeout(() => {
+            saveState({ isLoading: true });
+            window.saveStateTimeout = null;
+          }, 500);
         }
       }
-    }
-
-    isChatting = false;
-
-    // 将 token 信息添加到最后一条助手消息
-    const lastMsg = chatHistory[chatHistory.length - 1];
-    if (lastMsg && lastMsg.role === 'assistant') {
-      // 如果 API 没有返回 token 信息，尝试估算
-      // requestMessages 就是当前轮次实际发送的完整上下文，可直接作为本轮输入估算
-      if (currentTurnTokens.input === 0) {
-        currentTurnTokens.input = estimateTokens(JSON.stringify(requestMessages));
-      }
-      if (currentTurnTokens.output === 0) {
-        currentTurnTokens.output = estimateTokens(fullContent);
-      }
-
-      const turnTokens = {
-        input: Math.max(0, currentTurnTokens.input),
-        output: Math.max(0, currentTurnTokens.output)
-      };
-
-      lastMsg.tokens = turnTokens;
-      accumulateTokens();
-      renderChatMessages();
-    }
-
-    await saveState({ isLoading: false });
-
-    return fullContent;
+    });
+    if (!assistant.content) throw new Error('模型没有返回正文，请检查模型设置后重试');
+    completed = true;
+    generationStatus = '已完成 · 可继续提问';
+    return assistant.content;
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error('请求已取消');
+      generationStatus = '已停止 · 已保留生成内容';
+      return assistant.content;
     }
-    throw new Error('API 调用失败: ' + error.message);
+    generationStatus = '生成失败 · 可重试';
+    throw error;
   } finally {
+    if (receivedResponse) {
+      assistant.tokens = ReaderCore.finalizeUsage(usage, JSON.stringify(requestMessages), reasoningText + assistant.content, !completed);
+      totalTokens = ReaderCore.addUsage(totalTokens, assistant.tokens);
+    }
+    clearTimeout(window.saveStateTimeout);
+    window.saveStateTimeout = null;
     isChatting = false;
     abortController = null;
+    await saveState({ isLoading: false });
+    renderChatMessages();
   }
 }
 
 // 显示加载状态
-function setLoading(isLoading, text = '正在处理...') {
-  if (isLoading) {
-    elements.headerLoading.classList.remove('hidden');
-    elements.loadingText.textContent = text;
-    elements.summarizeBtn.disabled = true;
-    elements.summarizeBtn.classList.add('loading');
-  } else {
-    elements.headerLoading.classList.add('hidden');
-    elements.loadingText.textContent = '';
-    elements.summarizeBtn.disabled = false;
-    elements.summarizeBtn.classList.remove('loading');
+function setLoading(isLoading, text = '正在处理…') {
+  isSummarizing = isLoading;
+  elements.headerLoading.classList.toggle('hidden', !isLoading);
+  elements.loadingText.textContent = isLoading ? '生成中' : '';
+  elements.generationStatus.textContent = isLoading ? text : generationStatus;
+  elements.stopBtn.classList.toggle('hidden', !isLoading);
+  elements.stopBtn.disabled = isLoading && !abortController;
+  elements.retryBtn.classList.toggle('hidden', isLoading || !lastRequest);
+  for (const element of [elements.summarizeBtn, elements.sendBtn, elements.modelSelect, elements.promptSelect, elements.clearChatBtn, elements.openInWindow]) {
+    element.disabled = isLoading;
+  }
+  elements.taskButtons.querySelectorAll('button').forEach(button => { button.disabled = isLoading; });
+  elements.emptyState.classList.toggle('hidden', chatHistory.length > 0 || isLoading);
+  const reading = isLoading || chatHistory.length > 0;
+  document.body.classList.toggle('reading-mode', reading);
+  // 开始生成与恢复结果时自动收起工具，普通阅读过程中尊重手动展开状态
+  if (isLoading || reading !== hasEnteredReadingMode) setReadingControlsOpen(false);
+  hasEnteredReadingMode = reading;
+  updateReadingContext();
+}
+
+function setReadingControlsOpen(open) {
+  document.body.classList.toggle('controls-open', open);
+  elements.toggleConfigBtn.setAttribute('aria-expanded', String(open));
+  elements.toggleConfigBtn.classList.toggle('expanded', open);
+}
+
+function updateReadingContext() {
+  const prompt = configData?.prompts.find(prompt => prompt.id === selectedPromptId);
+  const title = elements.pageTitle.textContent;
+  const context = document.getElementById('readingContext');
+  context.textContent = `${prompt?.shortName || '阅读笔记'} · ${title} ▾`;
+  context.title = `${title}（点击切换阅读任务）`;
+}
+
+function renderReadingTasks() {
+  elements.taskButtons.replaceChildren();
+  for (const prompt of configData.prompts.filter(prompt => prompt.showAsTask)) {
+    const button = document.createElement('button');
+    button.className = 'task-button';
+    button.textContent = prompt.shortName;
+    button.title = prompt.userPrompt;
+    button.classList.toggle('active', prompt.id === selectedPromptId);
+    button.addEventListener('click', () => handleSummarize(prompt.id));
+    elements.taskButtons.appendChild(button);
+  }
+  const model = configData.models.find(model => model.id === selectedModelId);
+  const prompt = configData.prompts.find(prompt => prompt.id === selectedPromptId);
+  elements.configSummary.textContent = `${model?.name || '选择模型'} · ${prompt?.shortName || '选择任务'} ▾`;
+  document.getElementById('resultTitle').textContent = prompt?.shortName || '阅读笔记';
+  updateReadingContext();
+}
+
+async function retryGeneration() {
+  if (isSummarizing || !lastRequest) return;
+  const model = configData.models.find(model => model.id === lastRequest.modelId);
+  if (!model) return showError('上次使用的模型已删除，请重新选择任务');
+  hideError();
+  currentModel = model;
+  const messages = lastRequest.messages.map(message => ({ ...message }));
+  // 以输入快照重建历史，重试不会增加一条重复的用户消息
+  chatHistory = (lastRequest.history || messages).map(message => ({ ...message }));
+  elements.result.classList.remove('hidden');
+  setLoading(true, '正在重新生成…');
+  try {
+    await callAPIWithHistory(messages);
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -757,21 +710,28 @@ function hideError() {
 }
 
 // 处理总结按钮点击
-async function handleSummarize() {
+async function handleSummarize(promptId) {
+  if (isSummarizing) return;
+  if (typeof promptId === 'string') {
+    selectedPromptId = promptId;
+    elements.promptSelect.value = promptId;
+    chrome.storage.local.set({ lastUsedPromptId: promptId });
+    renderReadingTasks();
+  }
   if (!selectedModelId) {
     showError('请先选择一个模型');
     return;
   }
   if (!selectedPromptId) {
-    showError('请先选择一个 Prompt');
+    showError('请先选择一个任务');
     return;
   }
 
   hideError();
-  await clearState();
+  setLoading(true, '正在提取内容…');
 
   try {
-    setLoading(true, '正在提取内容...');
+    await clearState();
     const extractResult = await extractPageContent();
 
     const content = extractResult.content || extractResult;
@@ -791,9 +751,11 @@ async function handleSummarize() {
     await summarizeContent(content);
   } catch (error) {
     console.error('总结失败:', error);
+    generationStatus = '生成失败 · 请重试';
     showError(error.message);
   } finally {
     setLoading(false);
+    elements.chatMessages.scrollTop = 0;
   }
 }
 
@@ -804,7 +766,7 @@ async function handleSendMessage() {
   const message = elements.chatInput?.value.trim();
   if (!message) return;
 
-  if (isChatting) return;
+  if (isSummarizing) return;
 
   elements.chatInput.value = '';
   hideError();
@@ -827,18 +789,24 @@ async function handleClearChat() {
   if (!confirm('确定要清空当前对话吗？')) return;
 
   chatHistory = [];
+  lastRequest = null;
+  generationStatus = '准备就绪';
   currentModel = null;
-  currentTurnTokens = { input: 0, output: 0 };
   totalTokens = { input: 0, output: 0 };
   updateTotalTokenStats();
   elements.result.classList.add('hidden');
   elements.chatMessages.innerHTML = '';
   await clearState();
+  setLoading(false);
 }
 
 // 打开配置页面
-function openOptions() {
-  chrome.runtime.openOptionsPage();
+function openOptions(section) {
+  if (section === 'prompts') {
+    chrome.tabs.create({ url: chrome.runtime.getURL('options.html#prompts') });
+  } else {
+    chrome.runtime.openOptionsPage();
+  }
 }
 
 // 在新窗口打开
@@ -860,6 +828,8 @@ async function openInNewWindow() {
       pageTitle: elements.pageTitle.textContent,
       isWindowMode: true,
       totalTokens: totalTokens,
+      lastRequest,
+      generationStatus,
       timestamp: Date.now()
     };
     
@@ -945,6 +915,31 @@ async function init() {
 
   elements.gotoConfig?.addEventListener('click', openOptions);
   elements.summarizeBtn?.addEventListener('click', handleSummarize);
+  elements.stopBtn.addEventListener('click', () => {
+    if (!abortController) return;
+    abortController.abort();
+    elements.stopBtn.disabled = true;
+    elements.generationStatus.textContent = '正在停止…';
+  });
+  elements.retryBtn.addEventListener('click', retryGeneration);
+  document.getElementById('manageTasks').addEventListener('click', e => { e.preventDefault(); openOptions('prompts'); });
+  elements.configSummary.addEventListener('click', () => {
+    const collapsed = elements.configPanel.classList.toggle('collapsed');
+    chrome.storage.local.set({ configPanelCollapsed: collapsed });
+  });
+  document.getElementById('readingContext').addEventListener('click', () => {
+    setReadingControlsOpen(!document.body.classList.contains('controls-open'));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') setReadingControlsOpen(false);
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#readingControls, #toggleConfigBtn, #readingContext')) setReadingControlsOpen(false);
+  });
+  elements.latestBtn.addEventListener('click', () => { elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight; });
+  elements.chatMessages.addEventListener('scroll', () => {
+    elements.latestBtn.classList.toggle('hidden', elements.chatMessages.scrollHeight - elements.chatMessages.scrollTop - elements.chatMessages.clientHeight < 60);
+  });
   elements.copyBtn?.addEventListener('click', copyResult);
   elements.clearChatBtn?.addEventListener('click', handleClearChat);
   elements.sendBtn?.addEventListener('click', handleSendMessage);
@@ -991,10 +986,14 @@ async function init() {
     this.style.height = newHeight + 'px';
   });
 
-  // 配置面板收起/展开
+  // 阅读时通过浮层切换任务，不挤占正文；初始界面仍可展开模型配置
   elements.toggleConfigBtn?.addEventListener('click', () => {
-    elements.configPanel.classList.toggle('collapsed');
-    elements.toggleConfigBtn?.classList.toggle('expanded');
+    if (document.body.classList.contains('reading-mode')) {
+      setReadingControlsOpen(!document.body.classList.contains('controls-open'));
+    } else {
+      const collapsed = elements.configPanel.classList.toggle('collapsed');
+      chrome.storage.local.set({ configPanelCollapsed: collapsed });
+    }
   });
 
   // 加载配置面板的收起状态
@@ -1017,6 +1016,7 @@ async function init() {
       if (value) chrome.storage.local.set({ lastUsedPromptId: value });
     }
 
+    renderReadingTasks();
     if (selectedModelId && selectedPromptId) {
       elements.configPanel.classList.add('collapsed');
       elements.toggleConfigBtn?.classList.remove('expanded');
@@ -1045,12 +1045,13 @@ async function init() {
   }
 
   await restoreState();
+  renderReadingTasks();
+  setLoading(false);
+  if (chatHistory.length <= 3) elements.chatMessages.scrollTop = 0;
 
-  // 如果已经选择了模型和 Prompt，自动收起配置面板
-  if (selectedModelId && selectedPromptId) {
-    elements.configPanel?.classList.add('collapsed');
-    elements.toggleConfigBtn?.classList.remove('expanded');
-  }
+  document.querySelectorAll('[title]').forEach(element => {
+    if (!element.textContent.trim() && !element.getAttribute('aria-label')) element.setAttribute('aria-label', element.title);
+  });
 }
 
 // 恢复窗口状态（用于独立窗口模式）
@@ -1070,10 +1071,12 @@ async function restoreWindowState() {
 
     // 恢复状态
     if (state.chatHistory && state.chatHistory.length > 0) {
+      lastRequest = state.lastRequest || null;
+      generationStatus = state.generationStatus || '已恢复阅读笔记';
       chatHistory = state.chatHistory;
-      currentModel = state.currentModel;
-      selectedModelId = state.selectedModelId;
-      selectedPromptId = state.selectedPromptId;
+      if (configData.models.some(model => model.id === state.selectedModelId)) selectedModelId = state.selectedModelId;
+      if (configData.prompts.some(prompt => prompt.id === state.selectedPromptId)) selectedPromptId = state.selectedPromptId;
+      currentModel = configData.models.find(model => model.id === selectedModelId) || null;
       currentTabId = state.currentTabId;
       currentUrl = state.currentUrl;
 

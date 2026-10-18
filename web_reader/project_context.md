@@ -4,6 +4,24 @@
 
 ---
 
+## 当前工作区新增能力（Unreleased）
+
+- 配置现为独立的 `{ models, prompts, readingTasksVersion: 2 }`。迁移仅移除 `combinations`，保留任务原文、排序及显示设置；不再自动补模板或升级任务内容。下方历史结构中的 combinations 仅用于理解旧版。
+- 新用户首次初始化三个任务，已有用户通过「从内置模板添加」主动创建独立副本；设置页提供直接显示开关、拖拽/键盘排序、更多菜单与删除撤销，System Prompt 放在高级设置。
+
+- `marked.min.js` 现为官方 Marked 17.0.5 的本地 UMD 文件，许可证为 `marked.LICENSE.md`；移除了弹窗自动补缩进预处理，列表、引用、代码按原始 Markdown 结构解析。`tests/markdown.test.js` 覆盖段落和列表边界、混合嵌套、代码缩进及流式重复解析。
+
+- 新增 `reader-core.js`，共用默认阅读任务、一次性配置迁移、Thinking 请求参数与 SSE 缓冲解析。
+- 默认三个阅读任务通过 Prompt 的 `showAsTask` 控制首页显示，按 prompts 数组顺序排列；`readingTasksVersion: 2` 标记现行独立任务结构，已有配置不会自动补充模板。
+- 模型 `includeUsage` 缺省为 true，请求流式用量；统一 usage 归一化、逐项估算来源、缓存/思考明细及中断请求累计。
+- 模型可选 `thinkingMode: auto | off | on | default`，缺省为 auto，仅对 ModelScope 域名默认关闭思考。
+- 停止保留部分输出；状态增加 `lastRequest` 输入快照、`generationStatus`、`totalTokens`，供恢复和重试使用。
+- `tests/reader-core.test.js` 与 `tests/browser-smoke.cjs` 已提供回归验证；仍不要求构建工具或依赖安装才能运行扩展。
+- 弹窗改为 440×590，独立窗口自适应；正文独立滚动，支持系统深色主题。
+- 请求仍由 popup 发起，关闭 popup 仍会中断正在进行的请求，保存快照后可重试。
+
+---
+
 ## 1. 项目定位
 
 **Web Reader** 是一款基于 Chrome/Edge Manifest V3 的浏览器扩展，帮助用户调用自定义 AI API（OpenAI 兼容格式）对当前网页内容进行总结，并支持多轮对话。

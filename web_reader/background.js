@@ -16,6 +16,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         modelId: request.modelId,
         promptId: request.promptId,
         chatHistory: request.chatHistory,
+        lastRequest: request.lastRequest,
+        generationStatus: request.generationStatus,
+        totalTokens: request.totalTokens,
         isLoading: request.isLoading,
         error: request.error,
         timestamp: Date.now()

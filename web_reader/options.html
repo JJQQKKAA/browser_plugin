@@ -5,220 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web Reader - 配置</title>
   <link rel="stylesheet" href="styles.css">
-  <style>
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 24px;
-      border-bottom: 1px solid #e0e0e0;
-      padding-bottom: 12px;
-    }
-    .tab {
-      padding: 8px 16px;
-      border: none;
-      background: #f0f0f0;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-    .tab:hover {
-      background: #e0e0e0;
-    }
-    .tab.active {
-      background: #4a90d9;
-      color: white;
-    }
-    .tab-content {
-      display: none;
-    }
-    .tab-content.active {
-      display: block;
-    }
-    .item-list {
-      margin-bottom: 20px;
-    }
-    .item-card {
-      background: #f8f9fa;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 12px;
-      position: relative;
-    }
-    .item-card.default {
-      border-color: #4a90d9;
-      background: #f0f7ff;
-    }
-    .item-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    .item-title {
-      font-weight: 600;
-      color: #333;
-    }
-    .item-actions {
-      display: flex;
-      gap: 8px;
-    }
-    .btn-small {
-      padding: 4px 10px;
-      font-size: 12px;
-    }
-    .btn-danger {
-      background: #dc3545;
-      color: white;
-    }
-    .btn-danger:hover {
-      background: #c82333;
-    }
-    .btn-secondary {
-      background: #6c757d;
-      color: white;
-    }
-    .btn-secondary:hover {
-      background: #5a6268;
-    }
-    .btn-copy {
-      background: #28a745;
-      color: white;
-    }
-    .btn-copy:hover {
-      background: #218838;
-    }
-    .default-badge {
-      background: #4a90d9;
-      color: white;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      margin-left: 8px;
-    }
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    .combo-select-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .empty-state {
-      text-align: center;
-      padding: 40px;
-      color: #888;
-    }
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-    }
-    .modal.active {
-      display: flex;
-    }
-    .modal-content {
-      background: white;
-      border-radius: 12px;
-      padding: 24px;
-      width: 90%;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-    .modal-title {
-      font-size: 18px;
-      font-weight: 600;
-    }
-    .close-btn {
-      background: none;
-      border: none;
-      font-size: 24px;
-      cursor: pointer;
-      color: #666;
-    }
-    .close-btn:hover {
-      color: #333;
-    }
-    .btn-group {
-      display: flex;
-      gap: 12px;
-      margin-top: 20px;
-    }
-    select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #d0d0d0;
-      border-radius: 6px;
-      font-size: 14px;
-      background: white;
-    }
-    select:focus {
-      outline: none;
-      border-color: #4a90d9;
-      box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.1);
-    }
-    .data-actions {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
-      padding: 12px;
-      background: #f8f9fa;
-      border-radius: 8px;
-    }
-    .data-actions .btn {
-      padding: 8px 16px;
-      font-size: 13px;
-    }
-  </style>
+
 </head>
 <body class="options-page">
   <div class="container">
-    <h1>Web Reader 配置</h1>
+    <header class="settings-header"><span class="eyebrow">WEB READER / SETTINGS</span><h1>打造你的阅读工作台</h1><p>连接常用模型，定制属于你的阅读任务。</p></header>
 
     <div class="tabs">
-      <button class="tab active" data-tab="models">模型配置</button>
-      <button class="tab" data-tab="prompts">Prompt 配置</button>
+      <button class="tab active" data-tab="models">模型</button>
+      <button class="tab" data-tab="prompts">阅读任务</button>
     </div>
 
     <!-- 数据操作栏 -->
     <div class="data-actions">
-      <button id="exportFileBtn" class="btn btn-secondary" title="下载配置文件">📥 存文件</button>
-      <button id="exportClipboardBtn" class="btn btn-secondary" title="复制到剪切板">📋 复制</button>
-      <button id="importFileBtn" class="btn btn-secondary" title="从文件导入">📤 读文件</button>
-      <button id="importJsonBtn" class="btn btn-secondary" title="粘贴JSON导入">📄 粘贴</button>
+      <button id="exportFileBtn" class="btn btn-secondary" title="下载配置文件">导出文件</button>
+      <button id="exportClipboardBtn" class="btn btn-secondary" title="复制到剪切板">复制配置</button>
+      <button id="importFileBtn" class="btn btn-secondary" title="从文件导入">导入文件</button>
+      <button id="importJsonBtn" class="btn btn-secondary" title="粘贴JSON导入">粘贴导入</button>
       <input type="file" id="importFileInput" accept=".json" style="display: none;">
     </div>
 
     <!-- 模型配置 -->
     <div id="models" class="tab-content active">
-      <h2>模型列表</h2>
+      <div class="section-heading"><h2>你的模型</h2><button id="addModelBtn" class="btn btn-primary">添加模型</button></div><p class="section-description">支持 OpenAI 兼容接口。ModelScope 默认关闭深度思考，优先直接输出结果。</p>
       <div id="modelList" class="item-list"></div>
-      <button id="addModelBtn" class="btn btn-primary">+ 添加模型</button>
+
     </div>
 
     <!-- Prompt 配置 -->
     <div id="prompts" class="tab-content">
-      <h2>Prompt 列表</h2>
+      <div class="section-heading"><h2>阅读任务</h2><div class="item-actions"><button id="addTemplateBtn" class="btn">从内置模板添加</button><button id="addPromptBtn" class="btn btn-primary">新建任务</button></div></div><p class="section-description">打开「首页显示」即可一键运行。拖动左侧手柄排序，或选中手柄后按 ↑ / ↓；顺序同步用于首页和任务列表。</p>
       <div id="promptList" class="item-list"></div>
-      <button id="addPromptBtn" class="btn btn-primary">+ 添加 Prompt</button>
+
     </div>
 
   </div>
@@ -253,6 +71,20 @@
         <input type="number" id="modelTemperature" min="0" max="2" step="0.1" value="0.3" placeholder="0.3">
         <span class="hint">取值范围 0~2，总结文章建议 0.3 左右，越低输出越稳定</span>
       </div>
+      <div class="form-group">
+        <label for="modelThinkingMode">深度思考 / Thinking</label>
+        <select id="modelThinkingMode">
+          <option value="auto">自动：ModelScope 默认关闭</option>
+          <option value="off">关闭（发送 enable_thinking: false）</option>
+          <option value="on">开启（发送 enable_thinking: true）</option>
+          <option value="default">跟随服务默认（不发送参数）</option>
+        </select>
+        <span class="hint">自动模式对其他服务不附加参数；显式开关适用于支持 enable_thinking 的接口。仅支持思考的模型请选「跟随服务默认」。</span>
+      </div>
+      <div class="form-group">
+        <label class="checkbox-label"><input type="checkbox" id="modelIncludeUsage" checked> 请求流式 Token 统计</label>
+        <span class="hint">默认开启，优先显示 API 返回的输入、输出和总用量。接口不支持 stream_options 时可关闭；缺失统计时显示 ≈ 估算值。</span>
+      </div>
       <div class="btn-group">
         <button id="saveModelBtn" class="btn btn-primary">保存</button>
         <button class="btn btn-secondary close-modal-btn" data-close-modal="modelModal">取消</button>
@@ -264,26 +96,24 @@
   <div id="promptModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title" id="promptModalTitle">添加 Prompt</h3>
+        <h3 class="modal-title" id="promptModalTitle">新建任务</h3>
         <button class="close-btn" data-close-modal="promptModal">&times;</button>
       </div>
       <input type="hidden" id="promptId">
       <div class="form-group">
-        <label for="promptShortName">简称 *</label>
+        <label for="promptShortName">任务名称 *</label>
         <input type="text" id="promptShortName" placeholder="例如：总结、翻译、提取">
-        <span class="hint">前端选择时显示的简短名称</span>
+        <span class="hint">首页按钮和任务列表中显示的名称</span>
       </div>
       <div class="form-group">
-        <label for="promptSystemPrompt">System Prompt</label>
-        <textarea id="promptSystemPrompt" rows="3" placeholder="你是网页内容总结助手..."></textarea>
-      </div>
-      <div class="form-group">
-        <label for="promptUserPrompt">User Prompt *</label>
-        <textarea id="promptUserPrompt" rows="4" placeholder="请总结以下内容：
+        <label for="promptUserPrompt">任务指令 *</label>
+        <textarea id="promptUserPrompt" rows="9" placeholder="请总结以下内容：
 
 {{content}}"></textarea>
-        <span class="hint">使用 {{content}} 作为网页内容的占位符</span>
+        <span class="hint">在需要插入网页正文的位置使用 {{content}}。</span>
       </div>
+      <div class="form-group"><label class="checkbox-label"><input type="checkbox" id="promptShowAsTask" checked> 首页显示</label><span class="hint">关闭后仍可在任务列表中选择运行。</span></div>
+      <details id="promptAdvanced" class="advanced-settings"><summary>高级设置</summary><div class="form-group"><label for="promptSystemPrompt">角色与回答要求（System Prompt，可选）</label><textarea id="promptSystemPrompt" rows="4" placeholder="例如：忠于原文，区分事实与观点。"></textarea></div></details>
       <div class="btn-group">
         <button id="savePromptBtn" class="btn btn-primary">保存</button>
         <button class="btn btn-secondary close-modal-btn" data-close-modal="promptModal">取消</button>
@@ -302,8 +132,7 @@
         <label for="jsonImportTextarea">JSON 配置</label>
         <textarea id="jsonImportTextarea" rows="12" placeholder='{
   "models": [...],
-  "prompts": [...],
-  "combinations": [...]
+  "prompts": [...]
 }'></textarea>
         <span class="hint">请粘贴符合配置格式的 JSON 文本</span>
       </div>
@@ -315,6 +144,9 @@
     </div>
   </div>
 
+  <div id="templateModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">从内置模板添加</h3><button class="close-btn" data-close-modal="templateModal" aria-label="关闭">&times;</button></div><p class="section-description">选择后可继续编辑，保存为一份独立任务，不覆盖现有内容。</p><div id="templateList" class="template-list"></div></div></div>
+  <div id="settingsToast" class="settings-toast hidden" role="status"><span id="toastText"></span><button id="undoBtn" class="btn btn-small hidden">撤销</button><button id="dismissToast" class="toast-dismiss" aria-label="关闭提示">×</button></div>
+  <script src="reader-core.js"></script>
   <script src="options.js"></script>
 </body>
 </html>
