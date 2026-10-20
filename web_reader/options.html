@@ -72,14 +72,18 @@
         <span class="hint">取值范围 0~2，总结文章建议 0.3 左右，越低输出越稳定</span>
       </div>
       <div class="form-group">
-        <label for="modelThinkingMode">深度思考 / Thinking</label>
+        <label for="modelThinkingMode">Thinking 参数兼容方式</label>
         <select id="modelThinkingMode">
-          <option value="auto">自动：ModelScope 默认关闭</option>
-          <option value="off">关闭（发送 enable_thinking: false）</option>
-          <option value="on">开启（发送 enable_thinking: true）</option>
+          <option value="auto">自动识别（ModelScope）</option>
+          <option value="custom">发送 enable_thinking（兼容接口）</option>
           <option value="default">跟随服务默认（不发送参数）</option>
         </select>
-        <span class="hint">自动模式对其他服务不附加参数；显式开关适用于支持 enable_thinking 的接口。仅支持思考的模型请选「跟随服务默认」。</span>
+        <span class="hint">自动识别仅对 ModelScope 发送参数；其他支持 enable_thinking 的服务可选「兼容接口」。仅支持思考或无法切换的模型请选择「跟随服务默认」。</span>
+      </div>
+      <div class="form-group thinking-switches">
+        <label class="checkbox-label"><input type="checkbox" id="modelThinkingFirst"> 首次回答使用 Thinking</label>
+        <label class="checkbox-label"><input type="checkbox" id="modelThinkingFollowup" checked> 后续追问使用 Thinking</label>
+        <span class="hint">默认首次关闭，第二轮及之后开启。重新生成沿用原轮次；仅在接口支持且发送参数时生效。</span>
       </div>
       <div class="form-group">
         <label class="checkbox-label"><input type="checkbox" id="modelIncludeUsage" checked> 请求流式 Token 统计</label>

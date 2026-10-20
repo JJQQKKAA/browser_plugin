@@ -135,3 +135,38 @@ test('旧消息估算标记与历史累计兼容，不冒充 API 用量', () => 
   assert.doesNotMatch(formatUsage({ input: 10, output: 5, estimated: false }).text, /≈/)
   assert.match(formatUsage({ input: 10, output: 5 }).title, /历史累计/)
 })
+
+test('自动模式首轮关闭 Thinking，所有后续追问开启，重试保持原轮次', () => {
+  const model = { modelCode: 'Qwen/test', apiUrl: 'https://api-inference.modelscope.cn/v1/chat/completions' }
+  const first = [{ role: 'system', content: '阅读助手' }, { role: 'user', content: '总结原文' }]
+  const second = [...first, { role: 'assistant', content: '摘要' }, { role: 'user', content: '为什么？' }]
+  const third = [...second, { role: 'assistant', content: '解释' }, { role: 'user', content: '进一步说明' }]
+  assert.equal(buildRequest(model, first).enable_thinking, false)
+  assert.equal(buildRequest(model, second).enable_thinking, true)
+  assert.equal(buildRequest(model, third).enable_thinking, true)
+  assert.equal(buildRequest(model, structuredClone(first)).enable_thinking, false)
+  assert.equal(buildRequest(model, structuredClone(second)).enable_thinking, true)
+})
+
+test('两个 Thinking 开关独立生效，跟随服务模式不发送参数', () => {
+  const model = { modelCode: 'test', apiUrl: 'https://example.com/v1/chat/completions', thinkingMode: 'custom' }
+  const first = [{ role: 'user', content: '总结' }]
+  const second = [...first, { role: 'assistant', content: '结果' }, { role: 'user', content: '追问' }]
+  for (const thinkingFirst of [false, true]) {
+    for (const thinkingFollowup of [false, true]) {
+      const configured = { ...model, thinkingFirst, thinkingFollowup }
+      assert.equal(buildRequest(configured, first).enable_thinking, thinkingFirst)
+      assert.equal(buildRequest(configured, second).enable_thinking, thinkingFollowup)
+      assert.equal('enable_thinking' in buildRequest({ ...configured, thinkingMode: 'default' }, second), false)
+    }
+  }
+  assert.equal('enable_thinking' in buildRequest({ ...model, thinkingMode: 'auto' }, second), false)
+})
+
+test('旧版显式开启/关闭兼容为两轮同值，新开关可单独覆盖', () => {
+  const { thinkingPolicy } = require('../reader-core.js')
+  assert.deepEqual(thinkingPolicy({}), { first: false, followup: true })
+  assert.deepEqual(thinkingPolicy({ thinkingMode: 'on' }), { first: true, followup: true })
+  assert.deepEqual(thinkingPolicy({ thinkingMode: 'off' }), { first: false, followup: false })
+  assert.deepEqual(thinkingPolicy({ thinkingMode: 'off', thinkingFollowup: true }), { first: false, followup: true })
+})

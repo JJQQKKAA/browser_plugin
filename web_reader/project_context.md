@@ -14,7 +14,7 @@
 - 新增 `reader-core.js`，共用默认阅读任务、一次性配置迁移、Thinking 请求参数与 SSE 缓冲解析。
 - 默认三个阅读任务通过 Prompt 的 `showAsTask` 控制首页显示，按 prompts 数组顺序排列；`readingTasksVersion: 2` 标记现行独立任务结构，已有配置不会自动补充模板。
 - 模型 `includeUsage` 缺省为 true，请求流式用量；统一 usage 归一化、逐项估算来源、缓存/思考明细及中断请求累计。
-- 模型可选 `thinkingMode: auto | off | on | default`，缺省为 auto，仅对 ModelScope 域名默认关闭思考。
+- 模型 `thinkingMode: auto | custom | default` 控制参数兼容方式；`thinkingFirst` 和 `thinkingFollowup` 控制首轮和后续追问，缺省为 false / true。auto 仅对 ModelScope 发送参数，custom 显式发送 enable_thinking，default 不发送；旧 on / off 值兼容为两轮同值。轮次按请求中的 user 消息数量判断，因此重试与恢复不会错误增加轮次。
 - 停止保留部分输出；状态增加 `lastRequest` 输入快照、`generationStatus`、`totalTokens`，供恢复和重试使用。
 - `tests/reader-core.test.js` 与 `tests/browser-smoke.cjs` 已提供回归验证；仍不要求构建工具或依赖安装才能运行扩展。
 - 弹窗改为 440×590，独立窗口自适应；正文独立滚动，支持系统深色主题。

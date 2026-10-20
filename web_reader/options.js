@@ -137,10 +137,20 @@ function openModel(model = null) {
     document.getElementById(element).value = model?.[key] || ''
   }
   document.getElementById('modelTemperature').value = model?.temperature ?? 0.3
-  document.getElementById('modelThinkingMode').value = model?.thinkingMode || 'auto'
+  document.getElementById('modelThinkingMode').value = ['on', 'off'].includes(model?.thinkingMode) ? 'custom' : (model?.thinkingMode || 'auto')
+  const policy = ReaderCore.thinkingPolicy(model || {})
+  document.getElementById('modelThinkingFirst').checked = policy.first
+  document.getElementById('modelThinkingFollowup').checked = policy.followup
+  updateThinkingControls()
   document.getElementById('modelIncludeUsage').checked = model?.includeUsage !== false
   openModal('modelModal')
   document.getElementById('modelName').focus()
+}
+
+function updateThinkingControls() {
+  const disabled = document.getElementById('modelThinkingMode').value === 'default'
+  document.getElementById('modelThinkingFirst').disabled = disabled
+  document.getElementById('modelThinkingFollowup').disabled = disabled
 }
 
 function uniqueName(name, items, key) {
@@ -230,6 +240,7 @@ async function copyToClipboard(text) {
 }
 
 function bindEvents() {
+  document.getElementById('modelThinkingMode').addEventListener('change', updateThinkingControls)
   document.getElementById('addModelBtn').addEventListener('click', () => openModel())
   document.getElementById('addPromptBtn').addEventListener('click', () => openTask())
   document.getElementById('addTemplateBtn').addEventListener('click', () => {
@@ -279,6 +290,8 @@ function bindEvents() {
     item.temperature = temperature === '' ? 0.3 : Number(temperature)
     if (!Number.isFinite(item.temperature) || item.temperature < 0 || item.temperature > 2) return showToast('Temperature 必须在 0~2 之间')
     item.thinkingMode = document.getElementById('modelThinkingMode').value
+    item.thinkingFirst = document.getElementById('modelThinkingFirst').checked
+    item.thinkingFollowup = document.getElementById('modelThinkingFollowup').checked
     item.includeUsage = document.getElementById('modelIncludeUsage').checked
     const next = structuredClone(configData)
     const index = next.models.findIndex(model => model.id === id)

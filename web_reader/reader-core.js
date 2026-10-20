@@ -1,7 +1,7 @@
 // 弹窗与设置页共用的阅读任务和请求逻辑
 const ReaderCore = (() => {
   const defaultTasks = [
-    { id: 'task_quick', shortName: '快速摘要', systemPrompt: '你是专业的阅读助手，忠于原文，用简洁清晰的中文回答。', userPrompt: '请用简洁、自然的中文把下面的内容说清楚，让没读过原文的人也能迅速理解。\n\n先直接说明最重要的事情或观点，再补充理解它所必需的背景、原因、经过和结果；具体写哪些，以原文内容为准。保留影响判断的关键事实、数据、条件和不确定性，分清已经发生的事实、他人的说法和作者的判断，不添加原文没有的推断。\n\n详略由事情本身决定：简单的事情简短说，复杂的事情把关键关系讲明白。使用容易理解的表达，必要的术语顺手解释；去掉重复、套话和无关细节。自然分段，只有在条目确实更清楚时才用列表，不固定字数、要点数量或「主题—要点—结论」格式，也不重复总结已经说清的内容。\n\n直接输出摘要，不写开场白。\n\n{{content}}' },
+    { id: 'task_quick', shortName: '快速摘要', systemPrompt: '你是专业的阅读助手，忠于原文，用简洁清晰的中文回答。', userPrompt: '请用简短、直白的中文说清楚：这篇内容主要讲什么，最重要的结论是什么。\n\n只保留理解主旨所必需的信息，不逐段或逐章总结，不复述论证过程、案例和次要细节。关键依据或限制只有在省略后会造成误解时才保留。\n\n忠于原文，不添加推断。直接输出摘要，不写开场白，不重复结论。原文长，不代表摘要也要长。\n\n{{content}}' },
     { id: 'task_detail', shortName: '详细解读', systemPrompt: '你是专业的阅读助手，区分原文事实和你的分析，不编造信息。', userPrompt: '请详细解读以下内容，按主题概述、关键观点与依据、重要细节、术语解释、启发与局限组织回答。用中文输出。\n\n{{content}}' },
     { id: 'task_translate', shortName: '翻译', systemPrompt: '你是专业译者，忠实准确地翻译，保留原文的标题、段落、列表及代码格式。', userPrompt: '请将以下内容翻译为简体中文；如果原文已经是中文，则翻译为英文。直接输出译文，不附加总结。\n\n{{content}}' }
   ].map(task => ({ ...task, showAsTask: true }))
@@ -17,6 +17,14 @@ const ReaderCore = (() => {
     return changed
   }
 
+  function thinkingPolicy(model) {
+    // 没有新设置时保留旧版显式开启/关闭；自动模式采用首轮关、追问开
+    return {
+      first: model.thinkingFirst ?? (model.thinkingMode === 'on'),
+      followup: model.thinkingFollowup ?? (model.thinkingMode !== 'off')
+    }
+  }
+
   function buildRequest(model, messages) {
     const body = { model: model.modelCode, messages, stream: true, temperature: model.temperature ?? 0.3 }
     if (model.includeUsage !== false) body.stream_options = { include_usage: true }
@@ -28,9 +36,11 @@ const ReaderCore = (() => {
       // 地址校验由 fetch 的错误处理负责
     }
     const mode = model.thinkingMode || 'auto'
-    if (mode === 'on' || mode === 'off' || (mode === 'auto' && isModelScope)) {
+    if (['custom', 'on', 'off'].includes(mode) || (mode === 'auto' && isModelScope)) {
       // 直接 fetch 时参数放在 JSON 顶层；extra_body 是 Python SDK 的参数
-      body.enable_thinking = mode === 'on'
+      const policy = thinkingPolicy(model)
+      const followup = messages.filter(message => message.role === 'user').length > 1
+      body.enable_thinking = followup ? policy.followup : policy.first
     }
     return body
   }
@@ -165,7 +175,7 @@ const ReaderCore = (() => {
     }
   }
 
-  return { defaultTasks, prepareConfig, buildRequest, mergeUsage, finalizeUsage, addUsage, formatUsage, readSSE }
+  return { defaultTasks, prepareConfig, thinkingPolicy, buildRequest, mergeUsage, finalizeUsage, addUsage, formatUsage, readSSE }
 })()
 
 if (typeof module !== 'undefined') module.exports = ReaderCore
