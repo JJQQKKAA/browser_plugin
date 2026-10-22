@@ -179,3 +179,4 @@ const ReaderCore = (() => {
 })()
 
 if (typeof module !== 'undefined') module.exports = ReaderCore
+else globalThis.ReaderCore = ReaderCore

@@ -10,6 +10,24 @@ let undoAction = null
 let toastTimeout = null
 let modalTrigger = null
 let saving = false
+let selectionDefaultAction = { mode: 'panel' }
+let pdfAutoOpen = false
+
+async function loadPdfSettings() {
+  const checkbox = document.getElementById('pdfAutoOpen')
+  const hint = document.getElementById('pdfAutoOpenHint')
+  if (!chrome.mimeHandler?.setMimeHandlerOptions) {
+    hint.textContent = '当前浏览器不支持自动接管；可手动打开阅读器。自动接管需要 Chrome 151 或以上版本。'
+    return
+  }
+  try {
+    const result = await chrome.storage.local.get('pdfAutoOpen')
+    pdfAutoOpen = result.pdfAutoOpen === true
+    checkbox.checked = pdfAutoOpen
+    checkbox.disabled = false
+    hint.textContent = '即时保存，下次打开 PDF 时生效。在线和本地文件均支持，无需开启文件网址访问权限。'
+  } catch (error) { hint.textContent = '读取失败，请刷新设置页重试。' }
+}
 
 function generateId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
@@ -56,6 +74,8 @@ async function persist(next, message) {
 async function loadConfig() {
   try {
     const result = await chrome.storage.local.get('webReaderConfig')
+    const selectionResult = await chrome.storage.local.get('selectionDefaultAction')
+    selectionDefaultAction = selectionResult.selectionDefaultAction || { mode: 'panel' }
     const saved = result.webReaderConfig
     if (!saved) {
       configData = structuredClone(DEFAULT_CONFIG)
@@ -88,6 +108,7 @@ function moreMenu(type, id, index, length) {
 }
 
 function renderAll() {
+  renderSelectionAction()
   document.getElementById('modelList').innerHTML = configData.models.length ? configData.models.map(model => `
     <div class="item-card" data-model-id="${escapeHtml(model.id)}"><div class="item-header"><span class="item-title">${escapeHtml(model.name)}</span><div class="item-actions"><button class="btn btn-small edit-model" data-id="${escapeHtml(model.id)}">编辑</button>${moreMenu('model', model.id)}</div></div>
     <div class="hint">${escapeHtml(model.modelCode)}</div><div class="hint">${escapeHtml(model.apiUrl || '尚未填写 API 地址')}</div>
@@ -100,6 +121,31 @@ function renderAll() {
         <button class="btn btn-small edit-prompt" data-id="${escapeHtml(prompt.id)}">编辑</button>${moreMenu('prompt', prompt.id, index, configData.prompts.length)}
       </div></div><p class="task-preview">${escapeHtml(prompt.userPrompt)}</p></div>
     </div>`).join('') : '<div class="empty-state">还没有阅读任务。可以新建任务，也可以从内置模板添加。</div>'
+}
+
+function renderSelectionAction() {
+  const select = document.getElementById('selectionDefaultAction')
+  const tasks = configData.prompts.length ? configData.prompts : ReaderCore.defaultTasks
+  const value = selectionDefaultAction.mode === 'task' ? `task:${selectionDefaultAction.promptId}` : 'panel'
+  select.replaceChildren()
+  const panel = document.createElement('option')
+  panel.value = 'panel'
+  panel.textContent = '仅打开处理框，不自动生成'
+  select.appendChild(panel)
+  for (const task of tasks) {
+    const option = document.createElement('option')
+    option.value = `task:${task.id}`
+    option.textContent = `直接运行：${task.shortName}`
+    select.appendChild(option)
+  }
+  if (value !== 'panel' && !tasks.some(task => `task:${task.id}` === value)) {
+    const missing = document.createElement('option')
+    missing.value = value
+    missing.textContent = '原任务已删除（仅打开处理框）'
+    missing.disabled = true
+    select.appendChild(missing)
+  }
+  select.value = value
 }
 
 function openModal(id) {
@@ -240,6 +286,34 @@ async function copyToClipboard(text) {
 }
 
 function bindEvents() {
+  document.getElementById('pdfAutoOpen').addEventListener('change', async event => {
+    const checkbox = event.target
+    const enabled = checkbox.checked
+    checkbox.disabled = true
+    try {
+      await chrome.mimeHandler.setMimeHandlerOptions('application/pdf', { enabled })
+      await chrome.storage.local.set({ pdfAutoOpen: enabled })
+      pdfAutoOpen = enabled
+      showToast(enabled ? 'PDF 自动接管已开启' : 'PDF 自动接管已关闭')
+    } catch (error) {
+      checkbox.checked = pdfAutoOpen
+      await chrome.mimeHandler.setMimeHandlerOptions('application/pdf', { enabled: pdfAutoOpen }).catch(() => {})
+      showToast('保存 PDF 设置失败，请重试')
+    } finally { checkbox.disabled = false }
+  })
+  document.getElementById('selectionDefaultAction').addEventListener('change', async event => {
+    const select = event.target
+    const next = select.value === 'panel' ? { mode: 'panel' } : { mode: 'task', promptId: select.value.slice(5) }
+    select.disabled = true
+    try {
+      await chrome.storage.local.set({ selectionDefaultAction: next })
+      selectionDefaultAction = next
+      showToast('划词默认操作已保存')
+    } catch (error) {
+      showToast('保存失败：' + error.message)
+      renderSelectionAction()
+    } finally { select.disabled = false }
+  })
   document.getElementById('modelThinkingMode').addEventListener('change', updateThinkingControls)
   document.getElementById('addModelBtn').addEventListener('click', () => openModel())
   document.getElementById('addPromptBtn').addEventListener('click', () => openTask())
@@ -424,6 +498,8 @@ function bindEvents() {
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents()
-  if (location.hash === '#prompts') document.querySelector('[data-tab="prompts"]').click()
+  const section = location.hash.slice(1)
+  if (['prompts', 'selection', 'pdf'].includes(section)) document.querySelector(`[data-tab="${section}"]`).click()
   loadConfig()
+  loadPdfSettings()
 })

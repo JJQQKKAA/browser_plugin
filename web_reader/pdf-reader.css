@@ -1,0 +1,73 @@
+:root { color-scheme: light dark; --surface: #fff; --bg: #edf0f5; --text: #263248; --muted: #6d7a8f; --border: #dde4ef; --accent: #4169df; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; background: var(--bg); color: var(--text); }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+button, select { border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; background: var(--surface); }
+button { cursor: pointer; white-space: nowrap; }
+button:hover { background: var(--bg); }
+button:disabled, select:disabled, input:disabled { opacity: .45; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input { border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; background: var(--surface); min-width: 0; }
+a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+.reader-toolbar { position: fixed; inset: 0 0 auto; height: 56px; z-index: 10; display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.reader-toolbar > * { flex-shrink: 0; }
+.reader-toolbar, .find-bar { user-select: none; }
+.document-title { flex: 1 1 auto; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 12px; font-weight: 600; }
+.page-controls { display: flex; align-items: center; gap: 5px; }
+#pageNumber { width: 48px; text-align: center; -moz-appearance: textfield; }
+#pageNumber::-webkit-inner-spin-button { -webkit-appearance: none; }
+#pageCount { color: var(--muted); min-width: 25px; }
+#zoom { max-width: 110px; }
+#toggleFind { font-size: 20px; line-height: 1; min-width: 31px; }
+#documentArea { position: absolute; inset: 56px 0 0; }
+#viewerContainer { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; }
+.pdfViewer { padding: 16px 0; }
+.pdfViewer .page { box-shadow: 0 2px 16px #26324818; }
+/* 保持 PDF 页面自身颜色，避免系统深色主题改变原始文档内容 */
+.pdfViewer .page { color-scheme: light; }
+/* 空白起选也交给文字层，避免不可选的整页占位元素吞掉拖拽起点 */
+.pdfViewer .textLayer { cursor: text; user-select: text; }
+.pdfViewer .textLayer .endOfContent { pointer-events: none; }
+/* 行首增加小范围命中区，鼠标略偏到文字左侧时仍由该行处理原生选择 */
+.pdfViewer .textLayer > span:first-child::before,
+.pdfViewer .textLayer br + span::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: 18px;
+}
+.landing { max-width: 640px; padding: 40px 24px; margin: max(120px, 20vh) auto 0; text-align: center; }
+.reader-mark { display: inline-block; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; letter-spacing: .1em; font-weight: 700; }
+h1 { font-size: 25px; font-weight: 650; margin: 18px 0 10px; }
+p { color: var(--muted); }
+.landing-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 26px 0 18px; }
+.landing-actions button { padding: 10px 18px; }
+.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+.primary:hover { background: #3154bd; }
+.subtle { font-size: 12px; color: var(--muted); }
+.notice { position: fixed; z-index: 15; left: 50%; top: 70px; transform: translateX(-50%); max-width: min(620px, calc(100vw - 24px)); padding: 10px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 6px 24px #26324815; overflow-wrap: anywhere; }
+.notice.error { color: #b53944; border-color: #eac4c8; }
+.find-bar { position: fixed; z-index: 20; right: 16px; top: 64px; display: flex; align-items: center; gap: 7px; padding: 10px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 24px #26324818; }
+#findInput { width: 180px; }
+#findStatus { white-space: nowrap; color: var(--muted); font-size: 11px; }
+dialog { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: min(500px, calc(100vw - 24px)); box-shadow: 0 20px 80px #0003; }
+dialog::backdrop { background: #17243b55; }
+dialog h2 { margin: 0 0 18px; font-size: 19px; }
+dialog label { display: block; margin-bottom: 6px; }
+#pdfUrl { width: 100%; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+@media (max-width: 700px) {
+  .document-title { display: none; }
+  .reader-toolbar { padding: 8px; gap: 6px; }
+  #findInput { width: 110px; }
+  h1 { font-size: 21px; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --surface: #202835; --bg: #141b26; --text: #e5ecf8; --muted: #a0adc2; --border: #38465d; --accent: #93b0ff; }
+  .primary { color: #15213a; }
+  .primary:hover { background: #b2c6ff; }
+  .notice.error { color: #ff9ca4; border-color: #7e4752; }
+}

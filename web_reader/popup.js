@@ -175,6 +175,10 @@ async function getCurrentTabInfo() {
       document.getElementById('pageSource').textContent = tab.url ? new URL(tab.url).hostname : '';
       currentTabId = tab.id;
       currentUrl = tab.url;
+      // 常见 PDF 地址可直接带入阅读器；其他地址仍从空白阅读器手动打开
+      if (tab.url && /^(https?|file):/.test(tab.url) && /\.pdf$/i.test(new URL(tab.url).pathname)) {
+        document.getElementById('openPdf').href = chrome.runtime.getURL('pdf-reader.html') + '?file=' + encodeURIComponent(tab.url)
+      }
       return tab;
     }
     if (isWindowMode) {

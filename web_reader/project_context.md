@@ -1,305 +1,257 @@
 # Web Reader - 项目上下文（Project Context）
 
-> 本文件面向 AI 助手、新贡献者和维护者，用于快速理解项目全貌、架构逻辑和注意事项。
+> 面向 AI 助手、新贡献者和维护者，说明当前实现、数据流与开发边界。编码约定见 `AGENTS.md`，用户操作见 `README.md`。
 
----
+## 1. 项目定位与版本
 
-## 当前工作区新增能力（Unreleased）
+Web Reader 是 Chrome / Edge Manifest V3 浏览器扩展，调用用户配置的 OpenAI 兼容 API，对网页进行摘要、解读、翻译，并支持多轮追问。
 
-- 配置现为独立的 `{ models, prompts, readingTasksVersion: 2 }`。迁移仅移除 `combinations`，保留任务原文、排序及显示设置；不再自动补模板或升级任务内容。下方历史结构中的 combinations 仅用于理解旧版。
-- 新用户首次初始化三个任务，已有用户通过「从内置模板添加」主动创建独立副本；设置页提供直接显示开关、拖拽/键盘排序、更多菜单与删除撤销，System Prompt 放在高级设置。
+- Manifest 当前版本为 `1.2.0`；本文包含工作区已实现、记录在 `CHANGELOG.md` 的 `Unreleased` 能力，不表示已发布新版本。
+- 使用原生 JavaScript、HTML、CSS，无框架和构建步骤，直接加载源码目录运行。
+- 配置、API Key 和会话快照保存在 `chrome.storage.local`；模型请求直接发往用户配置的端点，不经过开发者服务器。
+- 只支持 OpenAI 兼容请求格式；接入 Claude、Gemini 等模型需要兼容网关，不支持其原生协议。
 
-- `marked.min.js` 现为官方 Marked 17.0.5 的本地 UMD 文件，许可证为 `marked.LICENSE.md`；移除了弹窗自动补缩进预处理，列表、引用、代码按原始 Markdown 结构解析。`tests/markdown.test.js` 覆盖段落和列表边界、混合嵌套、代码缩进及流式重复解析。
+## 2. 当前功能
 
-- 新增 `reader-core.js`，共用默认阅读任务、一次性配置迁移、Thinking 请求参数与 SSE 缓冲解析。
-- 默认三个阅读任务通过 Prompt 的 `showAsTask` 控制首页显示，按 prompts 数组顺序排列；`readingTasksVersion: 2` 标记现行独立任务结构，已有配置不会自动补充模板。
-- 模型 `includeUsage` 缺省为 true，请求流式用量；统一 usage 归一化、逐项估算来源、缓存/思考明细及中断请求累计。
-- 模型 `thinkingMode: auto | custom | default` 控制参数兼容方式；`thinkingFirst` 和 `thinkingFollowup` 控制首轮和后续追问，缺省为 false / true。auto 仅对 ModelScope 发送参数，custom 显式发送 enable_thinking，default 不发送；旧 on / off 值兼容为两轮同值。轮次按请求中的 user 消息数量判断，因此重试与恢复不会错误增加轮次。
-- 停止保留部分输出；状态增加 `lastRequest` 输入快照、`generationStatus`、`totalTokens`，供恢复和重试使用。
-- `tests/reader-core.test.js` 与 `tests/browser-smoke.cjs` 已提供回归验证；仍不要求构建工具或依赖安装才能运行扩展。
-- 弹窗改为 440×590，独立窗口自适应；正文独立滚动，支持系统深色主题。
-- 请求仍由 popup 发起，关闭 popup 仍会中断正在进行的请求，保存快照后可重试。
+| 功能 | 实现说明 |
+|---|---|
+| 正文提取 | 优先选中文本，其次站点规则、语义标签、文本密度算法及回退策略 |
+| PDF 阅读与划词 | 在线/本地文字型 PDF；原生自动接管可关闭，滚动、页码、缩放、搜索，复用划词卡片；无 OCR/全文总结 |
+| 网页划词助手 | 28×28 图标打开卡片，单行工具栏、可手动生成或配置图标点击后直接运行指定 Prompt，支持临时切换模型、停止、重试、复制与关闭取消 |
+| 模型配置 | 独立维护名称、API URL、Key、模型代码、Temperature、Thinking 和流式 usage 开关 |
+| 阅读任务 | 底层保留 `prompts` 字段，提供快速摘要、详细解读、翻译模板和自定义任务 |
+| 任务管理 | 首页显示开关、拖拽/键盘/菜单排序、复制、删除后 12 秒撤销；System Prompt 在高级设置 |
+| 流式生成 | SSE 实时显示，支持停止并保留部分内容、按本轮原始输入重新生成 |
+| 多轮对话 | 保留 system、首轮输入及后续消息；system 与首轮 user 输入不在聊天区显示 |
+| Markdown | 本地官方 Marked 17.0.5，按原始列表、引用、段落和代码结构解析 |
+| Token 统计 | 优先使用 API usage，逐项推导或估算，显示输入/输出/合计及缓存/思考明细 |
+| 状态恢复 | 保存最近一份会话快照，5 分钟内按标签页及 URL 匹配恢复 |
+| 阅读界面 | 生成及恢复后收起任务区，浮层切换任务；正文独立滚动、固定输入区、回到最新、字体调整 |
+| 窗口和主题 | popup 为 440×590，独立窗口自适应，跟随系统浅色/深色主题 |
+| 配置迁移 | JSON 文件或剪贴板导出，文件或粘贴 JSON 导入；保留旧模型与任务，移除旧组合 |
 
----
+## 3. 文件与运行架构
 
-## 1. 项目定位
+| 文件 | 职责 |
+|---|---|
+| `manifest.json` | MV3 入口、权限、CSP、图标；注册 background、content script、popup 和 options |
+| `background.js` | 会话快照读写、5 分钟过期检查、来源标签页记录、URL 变化清理 |
+| `pdf-reader.html` / `pdf-reader.js` / `pdf-reader.css` | PDF 阅读器外壳及 PDF.js 官方 Viewer 组件，复用划词脚本 |
+| `pdf-background.js` | 启动/安装/偏好变化时同步原生 MIME 接管开关 |
+| `vendor/pdfjs/` | 官方 pdfjs-dist@6.4.299 预编译资源及 Apache-2.0 许可证 |
+| `tests/pdf-background.test.js` / `tests/pdf-browser.cjs` | PDF 设置同步单测及真实加载扩展的浏览器回归 |
+| `selection-translate.js` | 主文档选区监听及 Shadow DOM 任务卡片，动态文字仅按纯文本显示 |
+| `selection-background.js` | 划词 Port 通道、本地模型读取、独立流式请求与取消 |
+| `content.js` | 挂载 `window.webReaderExtractContent()`，返回正文、元信息、原始内容及选中标记 |
+| `reader-core.js` | 共用任务模板、配置结构迁移、Thinking 请求参数、SSE、usage 归一化/累计/显示 |
+| `popup.html` / `popup.js` | 模型/任务选择、页面提取、请求、对话、渲染、重试、状态与独立窗口 |
+| `options.html` / `options.js` | 配置初始化、模型和任务编辑、模板复制、排序、删除撤销及导入导出 |
+| `styles.css` | 弹窗和设置页共用样式、阅读布局、系统主题；设置页另有内联补充样式 |
+| `marked.min.js` / `marked.LICENSE.md` | 本地 Marked UMD 文件及 MIT 许可证，无需 CDN |
+| `tests/reader-core.test.js` | 共用逻辑回归 |
+| `tests/markdown.test.js` / `tests/fixtures/summary.md` | Markdown 结构回归和样例 |
+| `tests/selection-background.test.js` | 划词请求、取消、错误、模型隔离与连接来源回归 |
+| `tests/selection-browser.cjs` | 页面划词卡片与真实后台处理器联动回归，模拟 Chrome 通道及模型响应 |
+| `tests/browser-smoke.cjs` | 使用 Playwright、模拟 Chrome API 和模型响应的浏览器回归 |
+| `icon-generator.html` / `icon*.png` | 图标生成工具及扩展图标 |
+| `README.md` / `CHANGELOG.md` / `PRIVACY.md` | 用户说明、版本变更和隐私政策 |
 
-**Web Reader** 是一款基于 Chrome/Edge Manifest V3 的浏览器扩展，帮助用户调用自定义 AI API（OpenAI 兼容格式）对当前网页内容进行总结，并支持多轮对话。
+`popup.html` 依次加载 `marked.min.js`、`reader-core.js`、`popup.js`；设置页先加载 `reader-core.js` 再加载 `options.js`。`ReaderCore` 在浏览器中作为共用变量使用，同时通过 CommonJS 导出供 Node 测试加载。background 为 module，导入 `reader-core.js`、`selection-background.js` 与 `pdf-background.js`；核心通过 `globalThis.ReaderCore` 提供给后台模块。
 
-- **当前版本**: `1.2.0`
-- **目标用户**: 需要快速获取网页核心内容、并希望通过自定义模型/Prompt 灵活控制总结风格的用户
-- **核心卖点**: 完全本地化的配置管理、灵活的模型/Prompt 组合、流式响应、对话状态保持
+权限为 `activeTab`、`storage`、`scripting`、`windows`，以及 HTTP/HTTPS 主机权限。CSP 为 `script-src 'self' 'wasm-unsafe-eval'; object-src 'self'`，Wasm 用于本地 PDF.js 解码；Manifest 最低 Chrome 151。
 
----
+## 4. 主数据流
 
-## 2. 核心功能
-
-| 功能 | 说明 |
-|------|------|
-| 网页内容提取 | 注入 `content.js`，支持站点特定规则、语义化标签、启发式算法、选中文字优先 |
-| 自定义 AI API | 支持任意 OpenAI 兼容格式：OpenAI、Claude、通义千问、DeepSeek、Kimi、Ollama 等 |
-| 多模型管理 | 可配置多个模型，每个模型包含名称、API URL、API Key、模型代码 |
-| 多 Prompt 管理 | 可配置多个 Prompt，包含简称、System Prompt、User Prompt（`{{content}}` 占位符） |
-| 流式响应 | SSE 流式读取 AI 返回，实时渲染 |
-| 多轮对话 | 总结后可继续提问，保持完整对话上下文 |
-| Markdown 渲染 | 使用 `marked.min.js` 渲染 AI 返回的 Markdown |
-| 状态保持 | popup 关闭或切换标签页后，5 分钟内可恢复对话状态和模型/Prompt 选择 |
-| 配置导入/导出 | 支持 JSON 文件和剪切板导入/导出 |
-| 独立窗口模式 | 可将 popup 在新窗口打开，获得更大操作空间 |
-
----
-
-## 3. 文件结构与职责
-
-```
-web_reader/
-├── manifest.json          # Manifest V3 配置、权限、入口声明
-├── background.js          # Service Worker：状态保持、标签页监听、生命周期管理
-├── content.js             # 内容脚本：注入页面提取可见正文和元信息
-├── popup.html / popup.js  # 扩展弹窗：主交互界面、API 调用、对话渲染
-├── options.html / options.js  # 配置页面：模型/Prompt 管理、导入导出
-├── styles.css             # 全局样式（popup + options 共用）
-├── marked.min.js          # Markdown 渲染库
-├── icon*.png              # 扩展图标
-├── icon-generator.html    # 图标生成工具页
-├── project_context.md     # 本文件
-├── README.md              # 用户文档
-├── CHANGELOG.md           # 版本变更记录
-└── PRIVACY.md             # 隐私政策
-```
-
-### 3.1 各文件详细职责
-
-#### `manifest.json`
-- 声明版本、名称、权限、图标
-- 注册 `background` service worker、`content_scripts`、`action` popup、`options_page`
-- 关键权限：`activeTab`、`storage`、`scripting`、`windows`、`http://*/`、`https://*/`
-
-#### `background.js`
-- 监听 `chrome.runtime.onMessage`，处理以下消息类型：
-  - `SAVE_SUMMARY_STATE`: 保存当前总结/对话状态
-  - `GET_SUMMARY_STATE`: 读取状态并检查 5 分钟过期时间
-  - `CLEAR_SUMMARY_STATE`: 清除状态
-  - `SET_LAST_ACTIVE_TAB` / `GET_LAST_ACTIVE_TAB`: 支持独立窗口模式获取来源标签页
-- 监听 `chrome.tabs.onActivated` 记录最后活跃标签页
-- 监听 `chrome.tabs.onUpdated`：URL 变化时清理相关过期状态
-
-#### `content.js`
-- 作为 content script 注入所有 `http://*` 和 `https://*` 页面
-- 在 `window` 上挂载 `webReaderExtractContent()` 方法，供 popup 调用
-- 提取逻辑（按优先级）：
-  1. 用户选中的文本（>10 字符）
-  2. 站点特定选择器（GitHub、知乎、掘金、CSDN、微信公众号等）
-  3. 语义化标签和常见 CMS 类名（`article`、`main`、`.post-content` 等）
-  4. 启发式算法：按文本密度、链接密度找最大文本块
-  5. `body.innerText` 回退
-  6. `document.title` 最后回退
-- 同时提取页面元信息（标题、作者、发布时间、来源、描述等）
-- 清理零宽字符、多余空白、空行
-
-#### `popup.js`
-- 初始化：检测是否独立窗口模式、加载配置、渲染模型/Prompt 选择器、恢复状态
-- 提取页面内容：调用 `chrome.scripting.executeScript` 执行 `window.webReaderExtractContent()`
-- 调用 AI API：`fetch` 发送 OpenAI 兼容请求，`stream: true`，SSE 解析
-- 对话管理：`chatHistory` 维护完整上下文，system 消息和初始 user 消息不显示在界面
-- Token 统计：优先使用 API 返回的 `usage`，否则本地估算
-- UI 交互：发送消息、清空对话、复制、字体大小调整、展开/收起配置面板、打开独立窗口
-
-#### `options.js`
-- 管理配置数据结构：`{ models, prompts, combinations }`
-- 默认配置：内置一个 Qwen3-Next 模型 + 总结 Prompt + 默认组合
-- 模型/Prompt 的增删改、复制、默认标识
-- 旧配置迁移逻辑
-- 配置导入/导出（文件 + 剪切板 + JSON 粘贴）
-
-#### `styles.css`
-- 同时服务 popup 和 options 页面
-- popup 页面有响应式宽度：默认 380px，PC 端 520px，大屏 640px
-- 聊天消息、Markdown 渲染、token 统计、复制按钮等样式
-
----
-
-## 4. 数据流
-
-```
-用户点击扩展图标
-    │
-    ▼
-popup.js 加载配置 ──► 检查 models/prompts 是否存在
-    │
-    ▼
-用户选择 model + prompt，点击总结
-    │
-    ▼
-popup.js 调用 chrome.scripting.executeScript
-    │
-    ▼
-content.js 中的 window.webReaderExtractContent() 提取正文
-    │
-    ▼
-popup.js 拼接 Prompt：User Prompt 中的 {{content}} 替换为正文
-    │
-    ▼
-fetch(currentModel.apiUrl, { stream: true })
-    │
-    ▼
-SSE 流式解析 ──► 更新 chatHistory ──► renderChatMessages()
-    │
-    ▼
-popup.js 定时调用 background.js SAVE_SUMMARY_STATE 保持状态
+```text
+加载配置并迁移结构 → 恢复上次模型/任务选择 → 尝试恢复匹配的会话
+    ↓
+点击阅读任务 → chrome.scripting.executeScript → content.js 提取正文
+    ↓
+用正文替换 User Prompt 的 {{content}} → 初始化 system + user 历史
+    ↓
+ReaderCore.buildRequest → popup 中 fetch → ReaderCore.readSSE
+    ↓
+更新 assistant 内容和 usage → Markdown 渲染 → 节流保存会话快照
+    ↓
+完成 / 停止 / 失败 → 结算本轮 Token → 保存最终状态 → 可追问或重试
 ```
 
----
+### 4.1 页面提取
 
-## 5. 配置数据结构
+`content.js` 自动注入 HTTP/HTTPS 页面。正文提取优先级为：
 
-所有配置保存在 `chrome.storage.local` 的 `webReaderConfig` 键下。
+1. 用户选中文本（超过 10 字符）。
+2. 站点规则，如 GitHub、知乎、掘金、CSDN、微信公众号。
+3. `article`、`main` 和常见正文类名。
+4. 文本密度、链接密度等启发式算法。
+5. `body.innerText`，最终回退到标题。
+
+同时提取标题、作者、发布时间、来源、描述等元信息并清理文本。popup 调用脚本时另有完全内联的 fallback，在 content script 不存在时提取常见正文元素，最多保留约 15000 字符；不要将此上限理解为所有提取路径都统一截断。运行任务时，popup 对少于 50 字符的结果报错。
+
+`executeScript` 的 `func` 会被序列化注入，不能引用 popup 外部变量或函数。
+
+### 4.2 生成、停止与重试
+
+- 新运行阅读任务会开始新会话，重置对话及累计 Token。
+- `chatHistory` 保留完整上下文；发请求时只发送各消息的 `role` 和 `content`。
+- `lastRequest` 保存 `messages`、`history` 和 `modelId`，重试从快照重建输入，替换本轮回答，不重复追加用户消息或发送半截回答。
+- 重试按保存的模型 ID 查找当前配置；原模型被删除则提示重新运行任务。切换选择器不会改变重试模型，需重新运行任务开启新的模型会话。
+- 停止使用 `AbortController`，保留已生成内容。恢复时若快照仍标记加载中，提示上次生成已中断，可重新生成。
+- 首轮结束回到正文开头；多轮阅读时避免强制滚到底部，提供「回到最新」。
+
+### 4.3 SSE 与 Markdown
+
+`ReaderCore.readSSE()` 用流式 `TextDecoder` 保留跨字节分块的 UTF-8 字符，并缓存半行；支持 CRLF / CR / LF、多行 data、`[DONE]` 及无末尾换行的事件。无正文的末尾 usage 也会处理；损坏 JSON 明确报错。
+
+Markdown 使用 `marked.parse(text, { breaks: false, gfm: true })`，不自动给引用或列表补缩进。列表内引用须由源 Markdown 正确缩进，顶格段落/引用按独立块处理。库未加载时用 `escapeHtml()` 和 `<br>` 降级。
+
+### 4.4 网页划词助手
+
+`selection-translate.js` 随 content script 加载到 HTTP/HTTPS 主文档。选中文字后显示 28×28 的书本图标，点击通过 `web-reader-selection` Port 打开卡片，取得模型/任务的 ID、名称与默认点击行为。缺省只开面板，点击运行才请求；设置为指定任务时直接运行。任务、运行/停止、复制、调节菜单与关闭合并为顶部一行，模型和原文收进不挤占正文的浮层，移除底栏。
+
+任务读取本地全部 `prompts`，包括未在首页显示的任务；为空时临时提供 `ReaderCore.defaultTasks`，不写回配置。执行时使用保存的 System/User Prompt，替换全部 `{{content}}`；没有占位符时附加选区文本。卡片只传模型/任务 ID，端点、凭证和任务正文均由后台从配置读取。
+
+`selectionDefaultAction` 为独立本机界面偏好，设置页「划词助手」即时保存，默认 `{ mode: "panel" }`，自动执行为 `{ mode: "task", promptId }`，不随模型/任务导出。指定任务优先于上次任务；被删除时退回仅打开并显示原因，无模型时提示配置。每次打开卡片重新读取。
+
+模型默认使用 `lastUsedModelId` 或首项，临时切换不改变弹窗偏好。划词任务单独保存为 `lastUsedSelectionPromptId`；无有效记录时参考 `lastUsedPromptId`，再回退到首项。单次最多 12000 字符，超限明确报错；请求两分钟超时。生成期间内容脚本每 20 秒发送 Port 消息维持活跃。
+
+每个连接只有一个活跃请求，通过请求 ID 忽略旧响应。切换模型/任务取消旧请求并等待手动生成，重新生成、关闭卡片、离开页面也会取消旧请求。结果不持久保存，不修改总结快照和 Token 累计。输入框、可编辑区域不弹入口；普通页面不支持 iframe 选区和浏览器内部页；PDF 通过本扩展阅读器接入同一划词脚本。扩展更新后需刷新原网页加载脚本。
+
+### 4.5 PDF 阅读器
+
+Manifest 使用 Chrome 151+ 的 `mime_types_handler`，将顶层 `application/pdf` 注册到 `pdf-reader.html`，不接管嵌入式 PDF。`pdfAutoOpen` 默认 false，在设置页 PDF 标签即时保存，后台串行同步原生开关。未实现 `chrome.mimeHandler` 的浏览器保留手动文件和 URL 入口，禁用自动接管开关。
+
+自动接管时，阅读器用 `getStreamInfo()` 获得 `originalUrl` 和一次性 `streamUrl`，读取浏览器已接收的原始响应；无需二次 GET，适用于单次链接。在线及本地文件都可使用此方式，不要求 file:// 访问权限。手动本地文件用 File API；手动 URL 交给 PDF.js 加载，支持 HTTP/HTTPS；file:// 直接读取失败时引导选择文件。加载新文件会销毁旧文档和任务，避免旧结果覆盖。
+
+本地打包 PDF.js 6.4.299 的核心、Worker、PDFViewer 组件、文字层样式/图像、字体、CMap 和 Wasm/ICC 数据。不加载 scripting sandbox，禁用 eval。Viewer 提供连续滚动与渲染队列、缩放、页码跳转、搜索和文字选择；不做 OCR、全文总结或密码解密。
+
+PDF 拖选使用浏览器原生高亮（`enableSelectionRendering: false`），不经过额外 SVG 选区绘制。无修饰键的左键重新起选会释放旧范围；不可选的整页占位层不接收指针，行首伪元素提供小范围命中容错，不改变文字排版。划词脚本在拖选期间不安排解析，松手后按活动 caret 端点定位图标，取消或失焦时重置手势状态。
+
+阅读器加载原有 `selection-translate.js`，共用任务、模型与图标默认事件。后台仅信任本扩展精确阅读器路径，并允许 MIME frame 不带 sender.tab，仍拒绝其他扩展页面。仅发送用户执行任务时的选区和指令，PDF 本身不发送给模型。原生「浏览器查看」回退可能重新请求 URL。
+
+## 5. 配置与存储
+
+主配置键为 `webReaderConfig`：
 
 ```json
 {
   "models": [
     {
       "id": "model_xxx",
-      "name": "显示名称",
-      "apiUrl": "https://api.openai.com/v1/chat/completions",
-      "apiKey": "sk-xxx",
-      "modelCode": "gpt-4o-mini",
-      "temperature": 0.3
+      "name": "我的模型",
+      "apiUrl": "https://example.com/v1/chat/completions",
+      "apiKey": "",
+      "modelCode": "model-code",
+      "temperature": 0.3,
+      "thinkingMode": "auto",
+      "thinkingFirst": false,
+      "thinkingFollowup": true,
+      "includeUsage": true
     }
   ],
   "prompts": [
     {
       "id": "prompt_xxx",
-      "shortName": "总结",
-      "systemPrompt": "你是网页内容总结助手",
-      "userPrompt": "请总结以下内容：\n\n{{content}}"
+      "shortName": "摘要",
+      "systemPrompt": "你是阅读助手",
+      "userPrompt": "请总结以下内容：\n\n{{content}}",
+      "showAsTask": true
     }
   ],
-  "combinations": [
-    {
-      "id": "combo_xxx",
-      "name": "默认组合",
-      "modelId": "model_xxx",
-      "promptId": "prompt_xxx",
-      "isDefault": true
-    }
-  ]
+  "readingTasksVersion": 2
 }
 ```
 
-### 5.1 其他 storage 键
+### 5.1 初始化、迁移和导入导出
+
+- 无配置时，设置页初始化一个 Qwen3-Next 模型（API URL、Key 留空）和三个内置任务。
+- `prompts` 顺序决定下拉列表与首页按钮顺序；首页只显示 `showAsTask` 为真的任务，隐藏任务仍可在下拉列表运行。
+- `ReaderCore.prepareConfig()` 删除旧 `combinations` 并设置 `readingTasksVersion: 2`，不修改任务原文、顺序或显示设置，不补模板。
+- 最早的单模型配置由设置页迁移为模型和任务数组。
+- 模板仅在首次初始化或用户主动「从内置模板添加」时复制；更新内置模板不会覆盖已有任务。
+- 已移除默认组合与默认标识；记住上次选择，选项失效时使用列表第一项。
+- 导出包含 `version: '2.0'`、`exportDate`、模型、任务和结构版本，与 Manifest 版本独立。
+- 导入校验数组、必要字段、重复 ID 和 Temperature 范围；当前有模型或任务时确认后整体替换。旧文件中的组合不保留。
+- 配置导出含 API Key，调试和分享时应避免泄露。
+
+### 5.2 其他存储与状态
 
 | 键 | 用途 |
 |---|---|
-| `webReaderConfig` | 主配置 |
-| `lastUsedModelId` | 上次使用的模型 ID |
-| `lastUsedPromptId` | 上次使用的 Prompt ID |
-| `webReaderFontSize` | 聊天区域字体大小 |
-| `configPanelCollapsed` | 配置面板是否收起 |
-| `summaryState` | 当前总结/对话状态（background 维护，5 分钟过期） |
-| `windowModeState` | 独立窗口模式的状态快照 |
+| `lastUsedModelId` / `lastUsedPromptId` | 弹窗上次使用的模型和任务 |
+| `lastUsedSelectionPromptId` | 划词卡片上次执行的任务 |
+| `pdfAutoOpen` | 原生 PDF 自动接管，本机偏好，缺省 false，不随配置导出 |
+| `selectionDefaultAction` | 图标点击后只开面板或自动执行指定任务的本机偏好 |
+| `webReaderFontSize` | 聊天区字体大小 |
+| `configPanelCollapsed` | 配置面板折叠偏好 |
+| `summaryState` | 最近一份会话快照，由 background 保存，读取时检查 5 分钟过期 |
+| `windowModeState` | 转移到独立窗口的临时快照，检查过期，成功恢复后移除 |
 
----
+`summaryState` 包含 tabId、URL、标题、模型/任务 ID、`chatHistory`、`lastRequest`、`generationStatus`、`totalTokens`、加载/错误状态和时间戳。流式正文更新时约每 500ms 节流保存，开始及结束也保存。恢复需匹配当前 tabId 和 URL；URL 改变时 background 清除对应旧状态。
 
-## 6. 关键代码约定
+background 消息为 `SAVE_SUMMARY_STATE`、`GET_SUMMARY_STATE`、`CLEAR_SUMMARY_STATE`、`SET_LAST_ACTIVE_TAB`、`GET_LAST_ACTIVE_TAB`。异步回复分支须 `return true` 保持消息通道。`lastActiveTab` 只在 Service Worker 内存中维护。
 
-### 6.1 Content Script 注入限制
-- `popup.js` 通过 `chrome.scripting.executeScript({ target: { tabId }, func: () => { ... } })` 调用页面方法
-- `func` 参数会被序列化后注入页面执行，**不能引用外部变量/函数**
-- 因此 fallback 逻辑必须完全内联在 `func` 中
+## 6. 模型参数与 Token
 
-### 6.2 消息通信
-- popup 与 background 之间使用 `chrome.runtime.sendMessage`
-- 异步响应的分支需要 `return true` 保持消息通道开放
-- 同步响应的分支不需要 `return true`
+### 6.1 请求和 Thinking
 
-### 6.3 Token 估算
-- 当前使用简单估算：`Math.ceil(text.length / 2.5)`
-- 这只是一个粗略值，不区分中英文 token 差异
-- 未来可替换为 `js-tiktoken` 等更精确方案
+请求发送到配置中的完整 `apiUrl`，使用 POST JSON、Bearer Key、`stream: true`；Temperature 默认 0.3，设置页允许 0～2。
 
-### 6.4 Markdown 渲染降级
-- 优先使用 `marked.parse()`
-- 若 `marked` 未加载，使用本地 `escapeHtml()` + `<br>` 降级
-
----
-
-## 7. 最近修复记录（v1.2.0）
-
-| Bug | 修复方式 |
+| `thinkingMode` | 参数行为 |
 |---|---|
-| 模型/Prompt 选择状态切换标签页后无法恢复 | `background.js` 保存 `modelId`/`promptId` 而非不存在的 `comboId` |
-| `executeScript` fallback 调用未定义函数崩溃 | fallback 逻辑内联到 `func` 中，不再依赖外部函数 |
-| `renderMarkdown` 降级分支 `escapeHtml` 未定义 | 在 `popup.js` 中补全 `escapeHtml` 函数 |
-| 无 `usage` 返回的 API 第二轮 token 统计显示为 0 | 用当前轮次实际发送的 messages 估算 input token，不再做减法 |
-| 旧格式 content 状态恢复无法显示 | 将渲染结果设置到 `resultContent` 并显示 |
-| 恢复状态后无法继续对话（`currentModel` 丢失） | 恢复状态时同步恢复 `currentModel` |
-| 新用户导入配置时多余弹出覆盖确认 | 仅当用户已添加非默认配置时才询问确认 |
-| `background.js` 中 `return true` 位置错误 | 删除多余/位置错误的 `return true` |
-| `styles.css` 中重复媒体查询 | 删除重复的 `@media` 块 |
-| manifest 版本号与 CHANGELOG 不一致 | 统一为 `1.2.0` |
+| `auto`（缺省） | 仅对 `modelscope.cn` 及其子域名发送顶层 `enable_thinking` |
+| `custom` | 显式发送顶层 `enable_thinking` |
+| `default` | 跟随服务默认，不发送该参数 |
+| 旧 `on` / `off` | 兼容为两轮都开启 / 关闭，显式的新开关可分别覆盖 |
 
-## 后续小迭代
+`thinkingFirst` 缺省 false，`thinkingFollowup` 缺省 true。轮次按实际请求中的 user 消息数量判断；重试保持原轮次，重新运行任务开始首轮。直接 fetch 的字段位于 JSON 顶层，不嵌套在 SDK 的 `extra_body` 中。
 
-- **Temperature 可配置**：已在 `options.js` / `popup.js` 中实现，每个模型可独立设置 temperature，默认 `0.3`，范围 `0~2`。
+### 6.2 usage 统计
 
----
+- `includeUsage` 缺省 true，请求 `stream_options: { include_usage: true }`；不兼容服务可单独关闭。
+- 归一化 `prompt_tokens` / `completion_tokens` / `total_tokens`，兼容 `input_tokens` / `output_tokens` 及缓存/思考字段。
+- 每块 usage 作为本轮累计快照覆盖，不逐块相加；0 有效，null 不覆盖已知值。
+- 已知总数及一个分项时推导另一个；缺失项按字符数 `/2.5` 向上取整估算。输入估算覆盖实际发送的全部历史，输出估算包含收到的 reasoning 文本和正文。
+- 缺失分项用 `≈` 标记；仅有平台合计时保留该合计，分项单独估算。缓存和思考作为输入/输出组成部分展示，不重复计费累计。
+- 会话累计包括重试、收到响应后的失败或停止请求。中断请求标记不完整，仅反映已收到的数据，不代表最终账单；旧累计来源不明时保守显示估算。
 
-## 8. 已知限制与注意事项
+## 7. 运行、测试与调试
 
-1. **流式响应无法跨 popup 生命周期保持**：fetch 在 popup.js 中进行，popup 关闭后流式连接会中断。如需完整后台流式，需重构让 background.js 接管 fetch。
-2. **Token 估算不够精确**：当前为字符数/2.5，对不同模型差异较大。
-3. **内容提取对动态渲染页面有限制**：SPA 页面若内容未加载完成，提取可能不准确。
-4. **API 格式单一**：目前仅支持 OpenAI 兼容格式，Anthropic/Gemini 原生格式需要额外适配。
-5. **Service Worker 全局变量不稳定**：`lastActiveTab` 放在全局变量中，SW 被浏览器回收后会丢失。建议持久化到 storage。
-6. **没有单元测试**：内容提取、配置导入导出、token 估算等逻辑缺乏自动化测试。
+无需构建或安装运行依赖。进入 Chrome / Edge 扩展管理页，开启开发者模式，加载本目录；修改后刷新扩展。
 
----
+```bash
+# 全部核心和 Markdown 回归
+node --test tests/*.test.js
 
-## 9. 常见迭代方向
+# 单独运行
+node --test tests/reader-core.test.js
+node --test tests/markdown.test.js
 
-### 9.1 短期可做
-- ~~模型参数可配置（temperature、max_tokens、top_p）~~ → temperature 已支持，每个模型独立配置
-- 自定义请求头（适配 Azure OpenAI、Anthropic 等）
-- 更精确的 token 估算库
-- 快捷键触发总结
-- 暗夜模式
-- 提示词模板市场
-- 对话历史/会话管理
+# 浏览器回归：另需 Playwright 和本机 Chrome
+node tests/browser-smoke.cjs
+node tests/selection-browser.cjs
+node tests/pdf-browser.cjs
+node tests/pdf-selection-browser.cjs
+```
 
-### 9.2 中期重构
-- 引入 TypeScript 提升可维护性
-- 使用 `mozilla/readability` 替代手写内容提取
-- background.js 接管 fetch，支持 popup 关闭后继续流式
-- 单元测试覆盖核心逻辑
-- ESLint + Prettier 统一代码风格
+浏览器测试可用 `PLAYWRIGHT_MODULE_PATH` 指向已有 Playwright 模块；模拟 Chrome API、正文和流式服务，不调用真实模型，也不覆盖真实扩展的全部权限和生命周期行为。
 
-### 9.3 长期方向
-- 支持非 OpenAI 兼容 API 格式
-- 多 API 备用/负载均衡
-- 国际化（i18n）
-- 打包工具迁移（Vite/Webpack）
-- 对话导出为 Markdown/PDF
+2026-10-23 验证时，37 项核心、Markdown 及划词后台测试全部通过；弹窗/设置页、网页划词和 PDF 真扩展与 PDF 真实拖选四套浏览器回归均通过。PDF 回归使用临时 Chrome 配置真实加载扩展，真实拖选覆盖高 DPI、重选/正反向/跨行/跨页、行首、缩放、Shift 及双击，覆盖本地/在线、单次链接、自动接管与关闭、原生回退、选区和错误恢复；浏览器测试使用模拟服务，未调用真实模型；测试数量会随代码变化，以实际执行结果为准。
 
----
+手动验证应覆盖真实网页提取、模型配置、任务显示/排序、停止与重试、多轮 Thinking、usage、关闭 popup 后恢复、独立窗口、复制和导入导出。查看 background 日志可从扩展管理页打开 Service Worker；popup 可右键检查弹出内容，content script 从网页 DevTools 查看。
 
-## 10. 开发调试提示
+## 8. 现有限制与后续方向
 
-- 加载扩展：Chrome/Edge 中开启开发者模式 → 加载已解压的扩展程序 → 选择本文件夹
-- 查看 background 日志：`chrome://extensions/` → 找到 Web Reader → 点击「Service Worker」查看 console
-- 查看 popup 日志：右键扩展图标 → 检查弹出内容
-- 查看 content script：在网页 DevTools 的 Console 中，筛选来自 content.js 的日志
-- 修改代码后，需要在扩展管理页面点击刷新按钮重新加载
+1. 总结/对话的 fetch 仍在 popup 中，关闭后会中断；划词助手走后台 Port 请求，关闭卡片或离开网页即取消，并受浏览器后台生命周期约束。
+2. `summaryState` 只有一份，不同标签页运行任务会覆盖，不是多会话历史系统。
+3. `lastActiveTab` 在 Service Worker 被回收后会丢失。
+4. 动态网页提取取决于当前 DOM，未完成加载的 SPA、站点结构变化等仍需真实环境验证。
+5. 缺失 usage 时的字符估算较粗，真实服务对 Thinking 和流式 usage 的兼容性需实际联调。
+6. 只支持 OpenAI 兼容协议，尚无原生 Anthropic / Gemini 适配。
+7. 已有核心和模拟浏览器测试，但正文提取、真实扩展生命周期等覆盖仍有限。
+
+可考虑的后续工作包括 background 接管总结/对话流式请求、来源标签页持久化、多会话管理、扩充真实页面提取验证、更精确的 Token 估算和对话导出。上述均为候选方向，不是已实现功能或本次修改要求。
 
 ---
 
-## 11. 隐私与安全
-
-- 所有配置、API Key 仅保存在 `chrome.storage.local`
-- 网页内容仅在用户主动点击总结时提取
-- AI 请求直接发送到用户配置的端点，不经过开发者服务器
-- 详见 [PRIVACY.md](PRIVACY.md)
-
----
-
-*最后更新：2026-06-19（v1.2.0 修复迭代）*
+*最后更新：2026-10-23（Manifest v1.2.0 + 当前 Unreleased 实现）*

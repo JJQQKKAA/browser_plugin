@@ -14,6 +14,8 @@
     <div class="tabs">
       <button class="tab active" data-tab="models">模型</button>
       <button class="tab" data-tab="prompts">阅读任务</button>
+      <button class="tab" data-tab="selection">划词助手</button>
+      <button class="tab" data-tab="pdf">PDF</button>
     </div>
 
     <!-- 数据操作栏 -->
@@ -39,6 +41,24 @@
 
     </div>
 
+    <div id="selection" class="tab-content">
+      <div class="section-heading"><h2>点击划词图标后</h2></div>
+      <p class="section-description">选择直接执行的任务，或仅打开处理框，由你决定如何处理选中的文字。</p>
+      <div class="form-group">
+        <label for="selectionDefaultAction">默认操作</label>
+        <select id="selectionDefaultAction"><option value="panel">仅打开处理框，不自动生成</option></select>
+        <span class="hint">即时保存。自动执行使用弹窗上次选择的模型；任务被删除后只打开处理框，不会执行其他任务。</span>
+      </div>
+    </div>
+    <div id="pdf" class="tab-content">
+      <div class="section-heading"><h2>PDF 阅读</h2><a class="btn" href="pdf-reader.html" target="_blank" rel="noopener">打开 PDF 阅读器</a></div>
+      <p class="section-description">支持在线与本地的文字型 PDF。选中文字后使用现有划词任务，不上传整份文件。</p>
+      <div class="form-group">
+        <label class="checkbox-label"><input id="pdfAutoOpen" type="checkbox" disabled> 自动用 Web Reader 打开 PDF</label>
+        <span id="pdfAutoOpenHint" class="hint">正在读取设置…</span>
+      </div>
+      <p class="hint">关闭时仍可手动打开阅读器，选择本地文件或输入在线地址。扫描件不提供 OCR。</p>
+    </div>
   </div>
 
   <!-- 模型编辑模态框 -->

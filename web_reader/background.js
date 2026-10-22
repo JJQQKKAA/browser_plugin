@@ -1,5 +1,8 @@
 // Background Service Worker
 // 用于在 popup 关闭时保持总结状态
+import './reader-core.js'
+import './selection-background.js'
+import './pdf-background.js'
 
 // 存储最后活跃的标签页信息
 let lastActiveTab = null;

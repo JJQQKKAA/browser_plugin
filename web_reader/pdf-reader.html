@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF 阅读器 · Web Reader</title>
+  <link rel="stylesheet" href="vendor/pdfjs/web/pdf_viewer.css">
+  <link rel="stylesheet" href="pdf-reader.css">
+</head>
+<body>
+  <header class="reader-toolbar" aria-label="PDF 阅读工具">
+    <button id="openFile" type="button">打开文件</button>
+    <button id="openUrl" type="button">在线地址</button>
+    <span id="documentTitle" class="document-title">Web Reader · PDF</span>
+    <div class="page-controls">
+      <button id="previousPage" type="button" aria-label="上一页" disabled>‹</button>
+      <input id="pageNumber" type="number" min="1" value="1" aria-label="页码" disabled>
+      <span id="pageCount">/ 0</span>
+      <button id="nextPage" type="button" aria-label="下一页" disabled>›</button>
+    </div>
+    <select id="zoom" aria-label="缩放" disabled>
+      <option value="auto">自动缩放</option><option value="page-width">适合宽度</option><option value="page-fit">整页</option>
+      <option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option>
+    </select>
+    <button id="toggleFind" type="button" aria-label="搜索文档" title="搜索文档（Ctrl / ⌘ + F）" disabled>⌕</button>
+    <button id="nativeViewer" type="button" title="交回浏览器内置 PDF 阅读器" hidden>浏览器查看</button>
+    <a href="options.html#pdf" target="_blank" rel="noopener" title="PDF 设置">设置</a>
+  </header>
+  <div id="findBar" class="find-bar" hidden>
+    <label for="findInput">查找</label><input id="findInput" type="search" placeholder="在 PDF 中查找">
+    <span id="findStatus" role="status"></span>
+    <button id="findPrevious" type="button" aria-label="上一个匹配">↑</button><button id="findNext" type="button" aria-label="下一个匹配">↓</button>
+    <button id="closeFind" type="button" aria-label="关闭搜索">×</button>
+  </div>
+  <main id="landing" class="landing">
+    <span class="reader-mark">PDF</span><h1>让 PDF 也能划词阅读</h1>
+    <p>打开文字型 PDF，选中文字后使用摘要、解读、翻译或自定义任务。</p>
+    <div class="landing-actions"><button id="chooseFile" class="primary" type="button">选择本地 PDF</button><button id="chooseUrl" type="button">打开在线 PDF</button></div>
+    <p class="subtle">也可以将 PDF 文件拖到这里。文件在浏览器中处理，仅执行任务时发送选中文字。</p>
+  </main>
+  <div id="documentArea" hidden>
+    <div id="viewerContainer" tabindex="0" aria-label="PDF 正文"><div id="viewer" class="pdfViewer"></div></div>
+  </div>
+  <div id="notice" class="notice" role="status" hidden></div>
+  <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden>
+  <dialog id="urlDialog">
+    <form id="urlForm"><h2>打开在线 PDF</h2><label for="pdfUrl">PDF 地址</label><input id="pdfUrl" type="url" required placeholder="https://example.com/document.pdf">
+      <p class="subtle">需登录的网站可能限制读取；如无法打开，可下载后选择本地文件。</p>
+      <div class="dialog-actions"><button id="cancelUrl" type="button">取消</button><button class="primary" type="submit">打开</button></div>
+    </form>
+  </dialog>
+  <script src="selection-translate.js"></script>
+  <script type="module" src="pdf-reader.js"></script>
+</body>
+</html>

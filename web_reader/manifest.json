@@ -14,7 +14,7 @@
     "https://*/"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "action": {
     "default_popup": "popup.html",
@@ -36,8 +36,21 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"]
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js",
+        "selection-translate.js"
+      ]
     }
-  ]
+  ],
+  "minimum_chrome_version": "151",
+  "mime_types_handler": {
+    "application/pdf": {
+      "handler_url": "pdf-reader.html",
+      "can_embed": false
+    }
+  }
 }
