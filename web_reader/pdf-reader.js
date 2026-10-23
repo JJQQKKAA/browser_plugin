@@ -1,3 +1,5 @@
+import { installPdfSelection } from './pdf-selection.js'
+import { installPdfHighlight } from './pdf-highlight.js'
 import * as pdfjsLib from './vendor/pdfjs/build/pdf.min.mjs'
 import { EventBus, PDFViewer, PDFLinkService, PDFFindController, LinkTarget, FindState } from './vendor/pdfjs/web/pdf_viewer.mjs'
 
@@ -11,10 +13,11 @@ const viewer = new PDFViewer({
   container: elements.viewerContainer, viewer: elements.viewer, eventBus, linkService, findController,
   imageResourcesPath: assetUrl('web/images'), annotationMode: pdfjsLib.AnnotationMode.ENABLE,
   enableAutoLinking: false,
-  // 划词优先使用浏览器原生选中反馈，避免额外 SVG 高亮与文字层的同步开销
+  // 禁用 PDF.js 的行框 SVG；原生选区保留交互，字形高亮由 pdf-highlight.js 绘制
   enableSelectionRendering: false
 })
 linkService.setViewer(viewer)
+installPdfHighlight(elements.viewerContainer, eventBus, pdfjsLib)
 let loadingTask = null
 let pdfDocument = null
 let fetchController = null
@@ -165,14 +168,7 @@ elements.pageNumber.addEventListener('change', () => {
   updateNavigation()
 })
 elements.zoom.addEventListener('change', () => { if (pdfDocument) viewer.currentScaleValue = elements.zoom.value })
-elements.viewerContainer.addEventListener('pointerdown', event => {
-  if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
-  if (!event.target.closest('.textLayer')) return
-  const selection = window.getSelection()
-  // 已有选区内重新起选时先释放旧范围，避免浏览器将本次手势用于旧选区
-  // 保留 Shift 扩选、右键复制与键盘选择等原生交互
-  if (selection && !selection.isCollapsed && elements.viewerContainer.contains(selection.anchorNode)) selection.removeAllRanges()
-}, true)
+installPdfSelection(elements.viewerContainer)
 elements.toggleFind.addEventListener('click', showFind)
 elements.closeFind.addEventListener('click', () => { elements.findBar.hidden = true })
 elements.findInput.addEventListener('input', () => { clearTimeout(findTimer); findTimer = setTimeout(() => find(), 150) })

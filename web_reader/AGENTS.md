@@ -35,6 +35,8 @@ web_reader/
 ├── manifest.json          # Manifest V3 配置、权限、入口声明
 ├── background.js          # Service Worker：状态保持、标签页监听
 ├── pdf-reader.html/js/css # PDF.js 阅读器及现有划词脚本的复用入口
+├── pdf-selection.js       # PDF 空白起选定位、滚动扩选与手势清理
+├── pdf-highlight.js       # 按 PDF 基线、字体字形度量绘制可视高亮
 ├── pdf-background.js      # Chrome 原生 PDF MIME 接管偏好同步
 ├── vendor/pdfjs/          # PDF.js 6.4.299、Worker、字体/CMap/Wasm、许可证
 ├── selection-background.js # 独立划词助手请求、流式回传及取消
@@ -187,7 +189,7 @@ ReaderCore.buildRequest → fetch → ReaderCore.readSSE
 - `tests/markdown.test.js` 覆盖列表、段落、引用、代码缩进及流式重复解析；样例在 `tests/fixtures/summary.md`。
 - 浏览器回归：安装 Playwright 且本机有 Chrome 后运行 `node tests/browser-smoke.cjs`，也可通过 `PLAYWRIGHT_MODULE_PATH` 指向已有模块。测试模拟 Chrome API 和模型响应，不调用真实模型，也不能替代真实扩展环境验证。
 - 划词浏览器回归：`node tests/selection-browser.cjs`，连接真实划词脚本与后台处理器，模拟 Chrome 通道及模型服务，验证卡片与取消流程。环境要求同上。
-- PDF 真实拖选回归：`node tests/pdf-selection-browser.cjs`，使用真实鼠标，验证高 DPI、连续重选、正反向/跨行/跨页、行首容错、缩放、Shift 与双击；不得仅用 `Range.addRange()` 代替手势验证。
+- PDF 真实拖选回归：`node tests/pdf-selection-browser.cjs`，使用真实鼠标，验证高 DPI、连续重选、正反向/跨行/跨页、行首及段间空白、自动滚动、缩放、Shift 与精确双击单词；在 100%/150% 缩放下对照画布字形像素验证紧行距、页下方粗体及混合字号，并验证搜索嵌套高亮不重复绘制。不得仅用 `Range.addRange()` 代替手势验证。
 - PDF 真扩展回归：`node tests/pdf-browser.cjs`，需 Chrome 151+ 和 Playwright，真实加载扩展到临时浏览器配置，本地 HTTP 服务模拟 PDF 和模型；不使用用户浏览器资料或真实模型。
 - 手动测试流程：
   1. 在 `options.html` 配置模型和 Prompt。
@@ -275,7 +277,8 @@ ReaderCore.buildRequest → fetch → ReaderCore.readSSE
 - `mime_types_handler` 注册顶层 `application/pdf → pdf-reader.html`，最低 Chrome 151，`can_embed: false`。自动接管默认关闭，由 `pdf-background.js` 在启动、安装与 `pdfAutoOpen` 变化时串行同步原生 handler 选项。
 - 设置页 PDF 标签切换原生开关并保存本机偏好；不支持 API 时禁用开关并保留手动入口。不增加 file:// 主机权限。
 - MIME 阅读器通过 `getStreamInfo()` 取得一次性 streamUrl，完整读取 Chrome 已接收的响应；不重新请求 originalUrl。选择本地文件通过 File API 读取；手动在线地址交给 PDF.js 加载，附带站点凭据，失败可下载后本地打开。
-- PDF 选择使用 `enableSelectionRendering: false` 保留原生高亮；拖选期间划词脚本不读取选区/布局，松手后处理。原文文字层的不可选占位元素不接收指针；行首小范围伪元素扩展命中，避免更改字形布局。新手势释放旧选区，仅限无修饰键的左键文字层操作，保留 Shift、右键及键盘语义。
+- PDF 页必须使用 `box-sizing: content-box`，避免全局 border-box 将画布挤小，导致文字层与画布在页下方累积偏移。`enableSelectionRendering: false` 禁用 PDF.js 行框 SVG；选区交互/复制仍走浏览器，`pdf-highlight.js` 按 PDF 文字基线与实际字体、字重、字形度量绘制高亮；不可映射、旋转/竖排及 Type3 等情况保留原生反馈。按 rAF 合并绘制，只处理可见页面，切换文档/销毁文字层时清理。回归须对照画布实际字形像素，不能只验证透明文字层边界。
+- 拖选期间共享划词脚本不读取选区/布局，松手后处理。不可选占位层不接收指针；`pdf-selection.js` 仅接管无修饰键鼠标从空白起选的手势，按最近文字几何定位 caret，避免误带上一段；文字内拖选、双击及 Shift 保留原生行为。几何按页/手势缓存，rAF 合并更新，支持滚动扩选及释放、取消、失焦清理。新手势释放旧范围。
 - `pdf-reader.js` 使用官方 PDFViewer 的连续滚动、渲染队列、文字层、链接和查找组件；资源全部本地，`isEvalSupported: false`，不加载 scripting sandbox。扫描件不做 OCR；密码文件提示先解密。
 - `selection-background.js` 只额外信任本扩展精确的 `/pdf-reader.html` 页面（含查询/片段），不对其他扩展页面或任意 chrome-extension URL 放开；MIME 页面可以没有 sender.tab。
 - 保持选区处理，不从阅读器自动发送整份文件或第二页文字。「浏览器查看」回退调用原生接口，可能重新请求文件。普通网页与 PDF 的划词任务和默认事件共用。

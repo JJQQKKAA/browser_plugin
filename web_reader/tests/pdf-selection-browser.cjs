@@ -32,6 +32,31 @@ async function main() {
       const box = await locator.boundingBox()
       return { x: end ? box.x + box.width - 1 : box.x + 1, y: box.y + box.height * .5 }
     }
+    async function inkBounds(locator, pdfBaseline, fontSize) {
+      return locator.evaluate((span, { pdfBaseline, fontSize }) => {
+        const canvas = span.closest('.page').querySelector('canvas')
+        const cr = canvas.getBoundingClientRect()
+        const range = window.getSelection().getRangeAt(0).getBoundingClientRect()
+        const sx = canvas.width / cr.width
+        const sy = canvas.height / cr.height
+        const baseline = (792 - pdfBaseline) / 792 * canvas.height
+        const x = Math.floor((range.left - cr.left) * sx)
+        const y = Math.floor(baseline - fontSize / 792 * canvas.height)
+        const w = Math.ceil(range.width * sx)
+        const h = Math.ceil((fontSize * 1.3) / 792 * canvas.height)
+        const pixels = canvas.getContext('2d').getImageData(x, y, w, h).data
+        let top = h
+        let bottom = -1
+        for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+          const i = (yy * w + xx) * 4
+          if (pixels[i] < 100 && pixels[i + 1] < 100 && pixels[i + 2] < 100) {
+            top = Math.min(top, yy)
+            bottom = Math.max(bottom, yy)
+          }
+        }
+        return { top: cr.top + (y + top) / sy, bottom: cr.top + (y + bottom + 1) / sy }
+      }, { pdfBaseline, fontSize })
+    }
     async function drag(start, end, verify) {
       await page.keyboard.press('Escape')
       await page.mouse.move(start.x, start.y)
@@ -43,12 +68,13 @@ async function main() {
         const selectedText = await readSelection()
         await verify(selectedText)
         if (await ui.count()) assert.equal(await ui.locator('#trigger').isVisible(), false)
-        const feedback = await first.evaluate(span => ({
+        const feedback = await page.locator('.textLayer span[role="presentation"]').first().evaluate(span => ({
           custom: span.closest('.textLayer').classList.contains('selectionRendering'),
           background: getComputedStyle(span, '::selection').backgroundColor
         }))
-        assert.equal(feedback.custom, false, '应使用浏览器原生选中反馈，避免依赖额外高亮绘制')
-        assert.notEqual(feedback.background, 'rgba(0, 0, 0, 0)')
+        assert.equal(feedback.custom, false, '应禁用 PDF.js 的行框 SVG，使用字形高亮')
+        assert.equal(feedback.background, 'rgba(0, 0, 0, 0)', '已映射文字应由 PDF 字形高亮代替浏览器行框')
+        assert.ok(await page.locator('.pdf-selection-highlight > div').count(), '拖选期间应已有可视反馈')
       } finally { await page.mouse.up() }
       await ui.locator('#trigger').waitFor({ state: 'visible' })
     }
@@ -85,33 +111,141 @@ async function main() {
     assert.ok((await readSelection()).trim().length > 0)
     // 按住鼠标并滚动到下一页，验证跨页原生选区不会被划词入口打断
     await page.keyboard.press('Escape')
-    const last = page.locator('.textLayer span').filter({ hasText: 'Paragraph 12 remains selectable.' }).first()
-    await last.scrollIntoViewIfNeeded()
-    const acrossStart = await point(last)
-    await page.mouse.move(acrossStart.x, acrossStart.y)
+    for (const blankStart of [false, true]) {
+      const last = page.locator('.textLayer span').filter({ hasText: 'Paragraph 12 remains selectable.' }).first()
+      await last.scrollIntoViewIfNeeded()
+      const acrossStart = await point(last)
+      if (blankStart) acrossStart.x -= 14
+      await page.mouse.move(acrossStart.x, acrossStart.y)
+      await page.mouse.down()
+      try {
+        await page.mouse.move(acrossStart.x + 80, acrossStart.y, { steps: 8 })
+        await page.mouse.wheel(0, 900)
+        const nextPageText = page.locator('.textLayer span').filter({ hasText: 'Next page can also be selected.' }).first()
+        await nextPageText.waitFor()
+        await page.waitForFunction(() => {
+          const span = document.querySelector('.page[data-page-number="2"] .textLayer span[role="presentation"]')
+          const rect = span?.getBoundingClientRect()
+          return rect && rect.top >= 56 && rect.bottom <= innerHeight
+        })
+        const acrossEnd = await point(nextPageText, true)
+        await page.mouse.move(acrossEnd.x, acrossEnd.y, { steps: 20 })
+        await page.waitForTimeout(120)
+        const acrossText = await readSelection()
+        assert.ok(acrossText.includes('Paragraph 12'), acrossText)
+        assert.ok(acrossText.includes('Next page'), acrossText)
+        assert.equal(await ui.locator('#trigger').isVisible(), false)
+      } finally { await page.mouse.up() }
+      await ui.locator('#trigger').waitFor({ state: 'visible' })
+      await page.screenshot({ path: '/tmp/web-reader-pdf-native-selection.png' })
+    }
+    // 空白起点的拖拽到达视口外时仍可滚动扩选，松手后停止滚动。
+    await page.keyboard.press('Escape')
+    await first.scrollIntoViewIfNeeded()
+    const scrollStart = await point(first)
+    const scrollBefore = await page.locator('#viewerContainer').evaluate(el => el.scrollTop)
+    await page.mouse.move(scrollStart.x - 12, scrollStart.y)
     await page.mouse.down()
-    try {
-      await page.mouse.move(acrossStart.x + 80, acrossStart.y, { steps: 8 })
-      await page.mouse.wheel(0, 900)
-      const nextPageText = page.locator('.textLayer span').filter({ hasText: 'Next page can also be selected.' }).first()
-      await nextPageText.waitFor()
-      await page.waitForFunction(() => {
-        const span = document.querySelector('.page[data-page-number="2"] .textLayer span[role="presentation"]')
-        const rect = span?.getBoundingClientRect()
-        return rect && rect.top >= 56 && rect.bottom <= innerHeight
+    await page.mouse.move(scrollStart.x + 60, 880, { steps: 15 })
+    await page.waitForFunction(before => document.getElementById('viewerContainer').scrollTop > before + 80, scrollBefore)
+    await page.mouse.up()
+    const scrollAfter = await page.locator('#viewerContainer').evaluate(el => el.scrollTop)
+    await page.waitForTimeout(100)
+    assert.equal(await page.locator('#viewerContainer').evaluate(el => el.scrollTop), scrollAfter)
+    assert.ok((await readSelection()).includes(lines[0]))
+    // 接近论文的衬线字体、紧行距和段落留白，覆盖用户报告的两个边界。
+    const paragraphs = ['A transformer block is shared between', 'sentences.', '', 'Different from the data provided above,', 'ground-truth labels in this paragraph', 'are used for transferring the model.']
+    await page.locator('#fileInput').setInputFiles({ name: 'paragraph.pdf', mimeType: 'application/pdf', buffer: createPdf([paragraphs], { font: 'Times-Roman', leading: 22 }) })
+    await page.locator('#zoom').selectOption('1')
+    const different = page.locator('.textLayer span').filter({ hasText: 'Different from' }).first()
+    const groundTruth = page.locator('.textLayer span').filter({ hasText: 'ground-truth' }).first()
+    await groundTruth.waitFor()
+    const selectionStyle = await page.addStyleTag({ content: '.pdf-selection-highlight > div { background: rgb(17, 103, 231); }' })
+    for (const zoom of ['1', '1.5']) {
+      await page.keyboard.press('Escape')
+      await page.locator('#zoom').selectOption(zoom)
+      await different.waitFor()
+      await different.dblclick({ position: { x: 30, y: 10 } })
+      assert.equal(await readSelection(), 'Different', '双击必须只选择该单词')
+      await page.locator('.pdf-selection-highlight > div').first().waitFor()
+      const box = await different.boundingBox()
+      const ink = await inkBounds(different, 654, 20)
+      const mark = await page.locator('.pdf-selection-highlight > div').first().boundingBox()
+      assert.ok(Math.abs(mark.y - ink.top) < 2, `高亮顶部须贴合实际画布字形：${JSON.stringify({ mark, ink })}`)
+      assert.ok(Math.abs(mark.y + mark.height - ink.bottom) < 2, '高亮底部须贴合实际画布字形')
+      // 检查实际绘制像素，Range 高度仍由浏览器字体度量决定，不能用它代替视觉验证。
+      const clip = { x: Math.ceil(box.x + 2), y: Math.floor(box.y - 12), width: 80, height: Math.ceil(box.height + 26) }
+      const png = await page.screenshot({ clip, scale: 'css' })
+      const painted = await page.evaluate(async ({ png, top, bottom }) => {
+        const bitmap = await createImageBitmap(new Blob([new Uint8Array(png)], { type: 'image/png' }))
+        const canvas = document.createElement('canvas')
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(bitmap, 0, 0)
+        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        let inside = 0
+        let outside = 0
+        for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+          const i = (y * canvas.width + x) * 4
+          if (data[i] !== 17 || data[i + 1] !== 103 || data[i + 2] !== 231) continue
+          if (y < top - 1 || y > bottom + 1) outside++
+          else inside++
+        }
+        bitmap.close()
+        return { inside, outside }
+      }, { png: [...png], top: ink.top - clip.y, bottom: ink.bottom - clip.y })
+      assert.ok(painted.inside > 100, '必须存在可见高亮')
+      assert.equal(painted.outside, 0, '单词高亮不得溢出到上下相邻行')
+      for (const dx of [2, -12]) {
+        await drag({ x: box.x + dx, y: box.y - 12 }, await point(groundTruth, true), text => {
+          assert.ok(text.startsWith(paragraphs[3]), text)
+          assert.ok(text.includes(paragraphs[4]), text)
+          assert.ok(!text.includes('sentences') && !text.includes('transformer'), text)
+        })
+      }
+    }
+    await selectionStyle.evaluate(el => el.remove())
+    await page.screenshot({ path: '/tmp/web-reader-pdf-paragraph-selection.png' })
+    // 页面下半部最容易暴露 border-box 引起的累积偏移，同时覆盖粗体和混合字号。
+    const keywords = [...Array(10).fill(''), { text: 'Keywords', fontSize: 30 }, { text: 'agent optimization, self-evolving, reasoning evaluation', fontSize: 20 }, '', { text: '1 Introduction', fontSize: 30 }]
+    const keywordPdf = process.env.PDF_FONT_FIXTURE ? await fs.readFile(process.env.PDF_FONT_FIXTURE) : createPdf([keywords], { font: 'Times-Bold', leading: 36 })
+    await page.locator('#fileInput').setInputFiles({ name: 'keywords.pdf', mimeType: 'application/pdf', buffer: keywordPdf })
+    await page.locator('#zoom').selectOption('1')
+    const heading = page.locator('.textLayer span').filter({ hasText: /^Keywords$/ }).first()
+    const terms = page.locator('.textLayer span').filter({ hasText: /^agent optimization/ }).first()
+    await heading.waitFor()
+    for (const zoom of ['1', '1.5']) {
+      await page.locator('#zoom').selectOption(zoom)
+      await heading.scrollIntoViewIfNeeded()
+      await heading.dblclick({ position: { x: 35, y: 15 } })
+      assert.equal(await readSelection(), 'Keywords')
+      await page.locator('.pdf-selection-highlight > div').first().waitFor()
+      const ink = await inkBounds(heading, 360, 30)
+      const mark = await page.locator('.pdf-selection-highlight > div').first().boundingBox()
+      assert.ok(Math.abs(mark.y - ink.top) < 2, `粗体标题顶部偏离字形：${JSON.stringify({ ink, mark })}`)
+      assert.ok(Math.abs(mark.y + mark.height - ink.bottom) < 2, '粗体标题底部须贴合字形')
+      const geometry = await heading.evaluate(span => {
+        const page = span.closest('.page')
+        return { boxSizing: getComputedStyle(page).boxSizing, canvas: page.querySelector('canvas').getBoundingClientRect().height, text: page.querySelector('.textLayer').getBoundingClientRect().height }
       })
-      const acrossEnd = await point(nextPageText, true)
-      await page.mouse.move(acrossEnd.x, acrossEnd.y, { steps: 20 })
-      await page.waitForTimeout(120)
-      const acrossText = await readSelection()
-      assert.ok(acrossText.includes('Paragraph 12'), acrossText)
-      assert.ok(acrossText.includes('Next page'), acrossText)
-      assert.equal(await ui.locator('#trigger').isVisible(), false)
-    } finally { await page.mouse.up() }
-    await ui.locator('#trigger').waitFor({ state: 'visible' })
-    await page.screenshot({ path: '/tmp/web-reader-pdf-native-selection.png' })
+      assert.equal(geometry.boxSizing, 'content-box')
+      assert.ok(Math.abs(geometry.canvas - geometry.text) <= 1, '画布与文字层不能因边框被缩为不同高度')
+      await drag(await point(heading), await point(terms, true), text => {
+        assert.ok(text.includes('Keywords') && text.includes('evaluation'), text)
+        assert.ok(!text.includes('Introduction'), text)
+      })
+      await page.screenshot({ path: `/tmp/web-reader-pdf-keywords-${zoom}.png` })
+    }
+    await page.locator('#toggleFind').click()
+    await page.locator('#findInput').fill('Keywords')
+    await heading.locator('.highlight').waitFor()
+    await page.locator('#closeFind').click()
+    await heading.dblclick({ position: { x: 35, y: 15 } })
+    assert.equal(await readSelection(), 'Keywords')
+    await page.waitForFunction(() => document.querySelectorAll('.pdf-selection-highlight > div').length === 1)
     assert.deepEqual(errors, [])
-    console.log('PDF 真实拖选回归通过：高 DPI、正向/反向、跨行、空白起选、图标释放后出现及端点定位、缩放后拖选、Shift 扩选/双击、跨页拖选')
+    console.log('PDF 真实拖选回归通过：高 DPI、正反向/跨行/跨页、空白起选、自动滚动、图标、缩放、Shift/双击；紧行距单词及页下方混合字号粗体高亮与画布字形像素贴合（100%/150%）')
   } finally {
     await context?.close()
     await fs.rm(profile, { recursive: true, force: true })

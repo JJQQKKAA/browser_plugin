@@ -37,6 +37,8 @@ Web Reader 是 Chrome / Edge Manifest V3 浏览器扩展，调用用户配置的
 | `manifest.json` | MV3 入口、权限、CSP、图标；注册 background、content script、popup 和 options |
 | `background.js` | 会话快照读写、5 分钟过期检查、来源标签页记录、URL 变化清理 |
 | `pdf-reader.html` / `pdf-reader.js` / `pdf-reader.css` | PDF 阅读器外壳及 PDF.js 官方 Viewer 组件，复用划词脚本 |
+| `pdf-selection.js` | PDF 空白起选的文字几何定位、滚动扩选及手势清理 |
+| `pdf-highlight.js` | PDF 基线与实际字体字形度量高亮，原生选区用于交互和复制 |
 | `pdf-background.js` | 启动/安装/偏好变化时同步原生 MIME 接管开关 |
 | `vendor/pdfjs/` | 官方 pdfjs-dist@6.4.299 预编译资源及 Apache-2.0 许可证 |
 | `tests/pdf-background.test.js` / `tests/pdf-browser.cjs` | PDF 设置同步单测及真实加载扩展的浏览器回归 |
@@ -125,7 +127,9 @@ Manifest 使用 Chrome 151+ 的 `mime_types_handler`，将顶层 `application/pd
 
 本地打包 PDF.js 6.4.299 的核心、Worker、PDFViewer 组件、文字层样式/图像、字体、CMap 和 Wasm/ICC 数据。不加载 scripting sandbox，禁用 eval。Viewer 提供连续滚动与渲染队列、缩放、页码跳转、搜索和文字选择；不做 OCR、全文总结或密码解密。
 
-PDF 拖选使用浏览器原生高亮（`enableSelectionRendering: false`），不经过额外 SVG 选区绘制。无修饰键的左键重新起选会释放旧范围；不可选的整页占位层不接收指针，行首伪元素提供小范围命中容错，不改变文字排版。划词脚本在拖选期间不安排解析，松手后按活动 caret 端点定位图标，取消或失焦时重置手势状态。
+PDF 页使用 `box-sizing: content-box`，防止全局 border-box 将画布挤小，造成与文字层坐标累积偏移。`enableSelectionRendering: false` 禁用 PDF.js 行框 SVG；浏览器选区负责交互与复制，`pdf-highlight.js` 按 PDF 基线和实际字体/字重的字形度量绘制可视高亮，支持混合字号，rAF 合并更新并只处理可见页。无法映射、旋转/竖排及 Type3 字体保留原生反馈；销毁文字层/切换文档时清理。回归比较画布真实字形像素与高亮边界，包括页下方粗体标题，而非仅检查文字层框。
+
+无修饰键的左键重新起选会释放旧范围；不可选占位层不接收指针。`pdf-selection.js` 仅接管鼠标从空白起选的手势，按最近文字几何定位 caret，避免段间空白误落到上一段；文字内拖选、双击及 Shift 仍走原生行为。几何按页/手势缓存，rAF 合并更新，支持滚动扩选及释放、取消、失焦清理。划词脚本在拖选期间不安排解析，松手后按活动 caret 端点定位图标。
 
 阅读器加载原有 `selection-translate.js`，共用任务、模型与图标默认事件。后台仅信任本扩展精确阅读器路径，并允许 MIME frame 不带 sender.tab，仍拒绝其他扩展页面。仅发送用户执行任务时的选区和指令，PDF 本身不发送给模型。原生「浏览器查看」回退可能重新请求 URL。
 
@@ -236,7 +240,7 @@ node tests/pdf-selection-browser.cjs
 
 浏览器测试可用 `PLAYWRIGHT_MODULE_PATH` 指向已有 Playwright 模块；模拟 Chrome API、正文和流式服务，不调用真实模型，也不覆盖真实扩展的全部权限和生命周期行为。
 
-2026-10-23 验证时，37 项核心、Markdown 及划词后台测试全部通过；弹窗/设置页、网页划词和 PDF 真扩展与 PDF 真实拖选四套浏览器回归均通过。PDF 回归使用临时 Chrome 配置真实加载扩展，真实拖选覆盖高 DPI、重选/正反向/跨行/跨页、行首、缩放、Shift 及双击，覆盖本地/在线、单次链接、自动接管与关闭、原生回退、选区和错误恢复；浏览器测试使用模拟服务，未调用真实模型；测试数量会随代码变化，以实际执行结果为准。
+2026-10-23 验证时，37 项核心、Markdown 及划词后台测试全部通过；此前弹窗/设置页、网页划词及 PDF 浏览器回归均通过。本次 PDF 选区修复再次通过核心测试、PDF 真扩展及真实拖选回归：覆盖高 DPI、连续重选、正反向/跨行/跨页、行首/段间空白、视口外滚动扩选、缩放、Shift 和精确双击单词；在 100%/150% 缩放下对照画布真实字形像素，验证紧行距单词、页下方粗体标题及混合字号，并检查搜索嵌套高亮不重复绘制。额外用临时嵌入字体 PDF 验证字形边界；该临时样例不随仓库提交。真扩展回归覆盖本地/在线、单次链接、自动接管开关、原生回退、选区任务和错误恢复。测试使用临时 Chrome 配置与模拟模型服务，未调用真实模型；测试数量以实际执行结果为准。
 
 手动验证应覆盖真实网页提取、模型配置、任务显示/排序、停止与重试、多轮 Thinking、usage、关闭 popup 后恢复、独立窗口、复制和导入导出。查看 background 日志可从扩展管理页打开 Service Worker；popup 可右键检查弹出内容，content script 从网页 DevTools 查看。
 

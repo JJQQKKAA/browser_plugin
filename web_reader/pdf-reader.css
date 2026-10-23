@@ -24,21 +24,17 @@ a { color: var(--accent); text-decoration: none; white-space: nowrap; }
 #viewerContainer { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; }
 .pdfViewer { padding: 16px 0; }
 .pdfViewer .page { box-shadow: 0 2px 16px #26324818; }
-/* 保持 PDF 页面自身颜色，避免系统深色主题改变原始文档内容 */
-.pdfViewer .page { color-scheme: light; }
+/* PDF.js 页宽高是内容尺寸，不能继承全局 border-box，否则边框会挤小画布，
+   与文字层坐标产生随页内位置累积的偏移；同时保留文档本身颜色。 */
+.pdfViewer .page { color-scheme: light; box-sizing: content-box; }
 /* 空白起选也交给文字层，避免不可选的整页占位元素吞掉拖拽起点 */
 .pdfViewer .textLayer { cursor: text; user-select: text; }
 .pdfViewer .textLayer .endOfContent { pointer-events: none; }
-/* 行首增加小范围命中区，鼠标略偏到文字左侧时仍由该行处理原生选择 */
-.pdfViewer .textLayer > span:first-child::before,
-.pdfViewer .textLayer br + span::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 100%;
-  width: 18px;
-}
+/* 选区交互沿用文字层，高亮按 PDF 基线和字体字形范围绘制。 */
+.pdfViewer .textLayer .pdf-selection-mapped::selection,
+.pdfViewer .textLayer .pdf-selection-mapped ::selection { background: transparent; }
+.pdf-selection-highlight { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.pdf-selection-highlight > div { position: absolute; background: rgb(55 119 225 / 30%); }
 .landing { max-width: 640px; padding: 40px 24px; margin: max(120px, 20vh) auto 0; text-align: center; }
 .reader-mark { display: inline-block; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; letter-spacing: .1em; font-weight: 700; }
 h1 { font-size: 25px; font-weight: 650; margin: 18px 0 10px; }
