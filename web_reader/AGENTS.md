@@ -76,6 +76,7 @@ web_reader/
 
 - **无构建工具**：没有 `package.json`、`pyproject.toml`、`Cargo.toml` 或类似的包管理/构建配置文件。
 - **PDF 资源**：`vendor/pdfjs/` 为官方 `pdfjs-dist@6.4.299` 预编译资源，Apache-2.0；核心、Worker 和 Viewer 版本须一致。
+- `vendor/pdfjs/build/pdf.min.mjs` 和 `pdf.worker.min.mjs` 是运行资源，必须纳入 Git；`.gitignore` 的通用 `build/` 规则须保留此目录的例外。验证交付时使用 Git 跟踪文件的干净副本，不能只在含未跟踪资源的开发目录里测试。
 - **运行无需安装依赖**：官方 Marked 17.0.5 UMD 文件直接放在仓库根目录；浏览器回归另需 Playwright 和本机 Chrome。
 - **浏览器扩展模型**：Manifest V3
   - `background.service_worker` = `background.js`（`type: module`，导入共用核心、划词后台及 PDF 偏好同步模块）
@@ -185,6 +186,7 @@ ReaderCore.buildRequest → fetch → ReaderCore.readSSE
 ### 5.3 测试
 
 - 核心及 Markdown 回归：`node --test tests/*.test.js`，使用 Node 内置测试运行器，无需安装依赖。
+- `tests/pdf-assets.test.js` 检查 PDF.js 核心/Worker/Viewer 文件、版本与构建标记一致，并检查 Git 跟踪及忽略规则；无 Git 元数据的源码导出只跳过 Git 检查。
 - `tests/reader-core.test.js` 覆盖配置迁移、Thinking、SSE 任意字节分块/中文解码/结束事件、usage 与估算累计。
 - `tests/markdown.test.js` 覆盖列表、段落、引用、代码缩进及流式重复解析；样例在 `tests/fixtures/summary.md`。
 - 浏览器回归：安装 Playwright 且本机有 Chrome 后运行 `node tests/browser-smoke.cjs`，也可通过 `PLAYWRIGHT_MODULE_PATH` 指向已有模块。测试模拟 Chrome API 和模型响应，不调用真实模型，也不能替代真实扩展环境验证。
@@ -315,4 +317,4 @@ ReaderCore.buildRequest → fetch → ReaderCore.readSSE
 
 ---
 
-*最后更新：2026-10-23（Manifest v1.2.0 + 当前 Unreleased 实现）*
+*最后更新：2026-10-27（Manifest v1.2.0 + 当前 Unreleased 实现）*

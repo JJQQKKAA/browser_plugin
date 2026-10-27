@@ -17,6 +17,8 @@ node_modules/
 # Build outputs
 dist/
 build/
+# PDF.js 的预编译核心和 Worker 是扩展运行资源，必须随源码提交
+!vendor/pdfjs/build/
 
 # Environment variables
 .env
